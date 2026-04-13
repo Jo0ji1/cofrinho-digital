@@ -12,6 +12,8 @@ import { maskCurrency, parseCurrency } from '../utils/currency';
 import { Goal } from '../types';
 import { Colors } from '../constants/colors';
 
+const MIN_VALID_YEAR = 2000;
+
 export default function OnboardingScreen() {
   const { theme } = useTheme();
   const { setGoal } = useData();
@@ -34,8 +36,6 @@ export default function OnboardingScreen() {
     if (digits.length > 4) formatted = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4, 8);
     setTargetDate(formatted);
   }
-
-const MIN_VALID_YEAR = 2000;
 
   function parseDate(dateStr: string): Date | null {
     const parts = dateStr.split('/');
