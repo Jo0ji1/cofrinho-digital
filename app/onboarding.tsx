@@ -35,11 +35,13 @@ export default function OnboardingScreen() {
     setTargetDate(formatted);
   }
 
+const MIN_VALID_YEAR = 2000;
+
   function parseDate(dateStr: string): Date | null {
     const parts = dateStr.split('/');
     if (parts.length !== 3) return null;
     const [day, month, year] = parts.map(Number);
-    if (!day || !month || !year || year < 2000) return null;
+    if (!day || !month || !year || year < MIN_VALID_YEAR) return null;
     const d = new Date(year, month - 1, day);
     if (isNaN(d.getTime())) return null;
     return d;

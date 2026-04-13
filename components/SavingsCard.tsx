@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Pressable, View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { formatCurrency } from '../utils/currency';
@@ -15,17 +15,17 @@ export function SavingsCard({ entry, onLongPress }: SavingsCardProps) {
   const { theme } = useTheme();
 
   return (
-    <View
-      style={[
+    <Pressable
+      onLongPress={onLongPress}
+      style={({ pressed }) => [
         styles.card,
         {
           backgroundColor: theme.colors.card,
           borderColor: theme.colors.border,
           shadowColor: theme.dark ? 'transparent' : '#000',
+          opacity: pressed ? 0.85 : 1,
         },
       ]}
-      // @ts-ignore
-      onLongPress={onLongPress}
     >
       <View style={[styles.iconBox, { backgroundColor: theme.colors.primary + '20' }]}>
         <Ionicons name="cash-outline" size={22} color={theme.colors.primary} />
@@ -41,7 +41,7 @@ export function SavingsCard({ entry, onLongPress }: SavingsCardProps) {
       <Text style={[styles.amount, { color: theme.colors.primary }]}>
         {formatCurrency(entry.amount)}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 

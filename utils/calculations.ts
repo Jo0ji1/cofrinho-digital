@@ -26,6 +26,8 @@ export function getModalityInfos(goal: Goal, savings: SavingEntry[]): ModalityIn
   const monthsRemaining = Math.max(1, Math.ceil(daysRemaining / 30));
 
   const dailyAmount = daysRemaining > 0 ? remaining / daysRemaining : remaining;
+  // Progressive series: week 1 pays 1x, week 2 pays 2x, … week N pays Nx.
+  // Total = start * N*(N+1)/2 = remaining → start = remaining / (N*(N+1)/2)
   const actualWeeklyStart = remaining / (weeksRemaining * ((weeksRemaining + 1) / 2));
   const monthlyAmount = remaining / monthsRemaining;
 

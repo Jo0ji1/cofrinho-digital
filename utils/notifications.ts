@@ -41,7 +41,7 @@ export async function scheduleNotification(settings: NotificationSettings): Prom
       }
     : {
         type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-        weekday: 2,
+        weekday: 2, // 1=Sunday, 2=Monday, 3=Tuesday, … (matches JS Date weekday + 1)
         hour: settings.hour,
         minute: settings.minute,
       };
