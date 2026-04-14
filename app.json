@@ -35,7 +35,8 @@
     "plugins": [
       "expo-router",
       "expo-sharing",
-      "expo-font"
+      "expo-font",
+      "@react-native-google-signin/google-signin"
     ],
     "scheme": "cofrinho-digital",
     "extra": {

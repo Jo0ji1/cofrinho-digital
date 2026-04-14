@@ -13,7 +13,7 @@ import { Colors } from '../constants/colors';
 
 export default function LoginScreen() {
   const { theme } = useTheme();
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle } = useAuth();
   const { show } = useToast();
   const router = useRouter();
 
@@ -21,6 +21,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   async function handleLogin() {
     if (!email.trim() || !password) {
@@ -30,6 +31,15 @@ export default function LoginScreen() {
     setLoading(true);
     const { error } = await signIn(email.trim(), password);
     setLoading(false);
+    if (error) {
+      show({ type: 'error', title: 'Erro ao entrar', message: error });
+    }
+  }
+
+  async function handleGoogleLogin() {
+    setGoogleLoading(true);
+    const { error } = await signInWithGoogle();
+    setGoogleLoading(false);
     if (error) {
       show({ type: 'error', title: 'Erro ao entrar', message: error });
     }
@@ -98,6 +108,28 @@ export default function LoginScreen() {
               )}
             </TouchableOpacity>
 
+            <View style={s.dividerRow}>
+              <View style={[s.dividerLine, { backgroundColor: theme.colors.border }]} />
+              <Text style={[s.dividerText, { color: theme.colors.textSecondary }]}>ou</Text>
+              <View style={[s.dividerLine, { backgroundColor: theme.colors.border }]} />
+            </View>
+
+            <TouchableOpacity
+              style={[s.googleBtn, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+              onPress={handleGoogleLogin}
+              disabled={googleLoading}
+              activeOpacity={0.85}
+            >
+              {googleLoading ? (
+                <ActivityIndicator color={theme.colors.text} />
+              ) : (
+                <>
+                  <Ionicons name="logo-google" size={20} color="#DB4437" />
+                  <Text style={[s.googleBtnText, { color: theme.colors.text }]}>Entrar com Google</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
             <View style={s.registerRow}>
               <Text style={[s.registerText, { color: theme.colors.textSecondary }]}>Não tem conta? </Text>
               <TouchableOpacity onPress={() => router.push('/register-account')}>
@@ -131,6 +163,11 @@ const styles = (theme: any) => StyleSheet.create({
   forgotText: { fontSize: 13, fontWeight: '600', marginTop: 8, textAlign: 'right' },
   btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 24, paddingVertical: 15, borderRadius: 14, width: '100%' },
   btnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 20, marginBottom: 4 },
+  dividerLine: { flex: 1, height: 1 },
+  dividerText: { marginHorizontal: 12, fontSize: 13, fontWeight: '500' },
+  googleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 16, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, width: '100%' },
+  googleBtnText: { fontSize: 16, fontWeight: '600' },
   registerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
   registerText: { fontSize: 14 },
   registerLink: { fontSize: 14, fontWeight: '700' },
