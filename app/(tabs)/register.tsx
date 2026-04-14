@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, Alert, KeyboardAvoidingView, Platform,
+  StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useData } from '../../contexts/DataContext';
+import { useToast } from '../../components/Toast';
+import { CategoryIcon } from '../../components/CategoryIcon';
 import { maskCurrency, parseCurrency } from '../../utils/currency';
 import { SavingEntry, Category } from '../../types';
 import { Colors } from '../../constants/colors';
@@ -14,6 +16,7 @@ import { Colors } from '../../constants/colors';
 export default function RegisterScreen() {
   const { theme } = useTheme();
   const { addSaving, goal, categories } = useData();
+  const { show } = useToast();
 
   const [amountText, setAmountText] = useState('');
   const [description, setDescription] = useState('');
@@ -50,49 +53,39 @@ export default function RegisterScreen() {
   async function handleSubmit() {
     const amount = parseCurrency(amountText);
     if (amount <= 0) {
-      Alert.alert('Atenção', 'Informe um valor válido para o registro.');
+      show({ type: 'warning', title: 'Atenção', message: 'Informe um valor válido para o registro.' });
       return;
     }
     const dateObj = parseDate(dateText);
     if (!dateObj) {
-      Alert.alert('Atenção', 'Informe uma data válida no formato DD/MM/AAAA.');
+      show({ type: 'warning', title: 'Atenção', message: 'Informe uma data válida no formato DD/MM/AAAA.' });
       return;
     }
 
-    Alert.alert(
-      'Confirmar registro',
-      `Registrar ${amountText} em "${description || 'Economia registrada'}"${selectedCategory ? ` (${selectedCategory.icon} ${selectedCategory.name})` : ''}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Confirmar',
-          onPress: async () => {
-            setSubmitting(true);
-            try {
-              const entry: SavingEntry = {
-                id: Date.now().toString(),
-                amount,
-                description: description.trim(),
-                date: dateObj.toISOString(),
-                createdAt: new Date().toISOString(),
-                categoryId: selectedCategory?.id,
-                categoryName: selectedCategory?.name,
-                categoryIcon: selectedCategory?.icon,
-                categoryColor: selectedCategory?.color,
-              };
-              await addSaving(entry);
-              setAmountText('');
-              setDescription('');
-              setDateText(getTodayStr());
-              setSelectedCategory(null);
-              Alert.alert('✅ Sucesso', 'Economia registrada com sucesso!');
-            } finally {
-              setSubmitting(false);
-            }
-          },
-        },
-      ],
-    );
+    setSubmitting(true);
+    try {
+      const entry: SavingEntry = {
+        id: Date.now().toString(),
+        amount,
+        description: description.trim(),
+        date: dateObj.toISOString(),
+        createdAt: new Date().toISOString(),
+        categoryId: selectedCategory?.id,
+        categoryName: selectedCategory?.name,
+        categoryIcon: selectedCategory?.icon,
+        categoryColor: selectedCategory?.color,
+      };
+      await addSaving(entry);
+      setAmountText('');
+      setDescription('');
+      setDateText(getTodayStr());
+      setSelectedCategory(null);
+      show({ type: 'success', title: 'Sucesso', message: 'Economia registrada com sucesso!' });
+    } catch {
+      show({ type: 'error', title: 'Erro', message: 'Não foi possível registrar a economia.' });
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const s = styles(theme);
@@ -140,7 +133,7 @@ export default function RegisterScreen() {
                     onPress={() => setSelectedCategory(isSelected ? null : cat)}
                     activeOpacity={0.7}
                   >
-                    <Text style={s.categoryIcon}>{cat.icon}</Text>
+                    <CategoryIcon icon={cat.icon} size={16} color={isSelected ? cat.color : theme.colors.textSecondary} />
                     <Text style={[s.categoryText, { color: isSelected ? cat.color : theme.colors.textSecondary }]} numberOfLines={1}>
                       {cat.name}
                     </Text>

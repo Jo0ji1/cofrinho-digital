@@ -5,7 +5,7 @@ import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { DataProvider, useData } from '../contexts/DataContext';
 import { ToastProvider } from '../components/Toast';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 function RootNavigator() {
@@ -65,17 +65,39 @@ function RootNavigator() {
   );
 }
 
+function WebWrapper({ children }: { children: React.ReactNode }) {
+  const { theme } = useTheme();
+  if (Platform.OS !== 'web') return <>{children}</>;
+  return (
+    <View style={{ flex: 1, alignItems: 'center', backgroundColor: theme.colors.background }}>
+      <View style={{
+        flex: 1,
+        width: '100%',
+        maxWidth: 480,
+        borderLeftWidth: 1,
+        borderRightWidth: 1,
+        borderColor: theme.colors.border,
+        overflow: 'hidden' as any,
+      }}>
+        {children}
+      </View>
+    </View>
+  );
+}
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        <AuthProvider>
-          <DataProvider>
-            <ToastProvider>
-              <RootNavigator />
-            </ToastProvider>
-          </DataProvider>
-        </AuthProvider>
+        <WebWrapper>
+          <AuthProvider>
+            <DataProvider>
+              <ToastProvider>
+                <RootNavigator />
+              </ToastProvider>
+            </DataProvider>
+          </AuthProvider>
+        </WebWrapper>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

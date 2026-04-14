@@ -13,6 +13,7 @@ import { formatCurrency } from '../../utils/currency';
 import { formatDate } from '../../utils/calculations';
 import { Colors } from '../../constants/colors';
 import { Achievements } from '../../components/Achievements';
+import { CategoryIcon } from '../../components/CategoryIcon';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -186,7 +187,7 @@ export default function HomeScreen() {
             {categoryStats.map((cat, i) => (
               <View key={cat.name} style={s.catRow}>
                 <View style={s.catHeader}>
-                  <Text style={s.catIcon}>{cat.icon}</Text>
+                  <CategoryIcon icon={cat.icon} size={16} color={cat.color} />
                   <Text style={[s.catName, { color: theme.colors.text }]}>{cat.name}</Text>
                   <Text style={[s.catAmount, { color: theme.colors.textSecondary }]}>{formatCurrency(cat.total)}</Text>
                 </View>

@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
+import { CategoryIcon } from './CategoryIcon';
 import { formatCurrency } from '../utils/currency';
 import { formatDate } from '../utils/calculations';
 import { SavingEntry } from '../types';
@@ -30,7 +31,7 @@ export function SavingsCard({ entry, onLongPress }: SavingsCardProps) {
     >
       <View style={[styles.iconBox, { backgroundColor: (entry.categoryColor || theme.colors.primary) + '20' }]}>
         {hasCategory ? (
-          <Text style={styles.categoryEmoji}>{entry.categoryIcon}</Text>
+          <CategoryIcon icon={entry.categoryIcon!} size={22} color={entry.categoryColor || theme.colors.primary} />
         ) : (
           <Ionicons name="cash-outline" size={22} color={theme.colors.primary} />
         )}
