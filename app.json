@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#10B981"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cofrinho.digital"
@@ -24,11 +26,17 @@
       "package": "com.cofrinho.digital"
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "output": "single"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-sharing"
     ],
-    "scheme": "cofrinho-digital"
+    "scheme": "cofrinho-digital",
+    "extra": {
+      "supabaseUrl": "https://bernlteuconnykvfsvhr.supabase.co",
+      "supabaseAnonKey": "sb_publishable_ljJoS15ZglfXpAVX_WIwuw_zubMYYIr"
+    }
   }
 }

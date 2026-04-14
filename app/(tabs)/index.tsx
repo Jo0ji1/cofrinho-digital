@@ -12,6 +12,7 @@ import { ProgressBar } from '../../components/ProgressBar';
 import { formatCurrency } from '../../utils/currency';
 import { formatDate } from '../../utils/calculations';
 import { Colors } from '../../constants/colors';
+import { Achievements } from '../../components/Achievements';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -24,7 +25,7 @@ const MODALITY_LABELS: Record<string, string> = {
 export default function HomeScreen() {
   const { theme, isDark } = useTheme();
   const data = useGoal();
-  const { savings } = useData();
+  const { savings, categories } = useData();
 
   const chartData = useMemo(() => {
     if (!savings.length) return null;
@@ -44,6 +45,26 @@ export default function HomeScreen() {
       values.unshift(0);
     }
     return { labels, datasets: [{ data: values }] };
+  }, [savings]);
+
+  const categoryStats = useMemo(() => {
+    if (!savings.length) return [];
+    const map: Record<string, { name: string; icon: string; color: string; total: number }> = {};
+    savings.forEach(s => {
+      const key = s.categoryName || 'Sem categoria';
+      if (!map[key]) {
+        map[key] = {
+          name: key,
+          icon: s.categoryIcon || '📌',
+          color: s.categoryColor || '#B0B0B0',
+          total: 0,
+        };
+      }
+      map[key].total += s.amount;
+    });
+    const list = Object.values(map).sort((a, b) => b.total - a.total);
+    const max = list[0]?.total || 1;
+    return list.map(c => ({ ...c, pct: c.total / max }));
   }, [savings]);
 
   const s = styles(theme);
@@ -120,6 +141,9 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Achievements */}
+        <Achievements goal={goal} savings={savings} totalSaved={totalSaved} theme={theme} />
+
         {/* Chart */}
         {chartData && chartData.datasets[0].data.length > 1 && (
           <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
@@ -152,6 +176,25 @@ export default function HomeScreen() {
             <Text style={[s.emptyChartText, { color: theme.colors.textSecondary }]}>
               Registre suas economias para ver o gráfico de evolução.
             </Text>
+          </View>
+        )}
+
+        {/* Category Breakdown */}
+        {categoryStats.length > 0 && (
+          <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <Text style={[s.cardTitle, { color: theme.colors.textSecondary }]}>Economias por categoria</Text>
+            {categoryStats.map((cat, i) => (
+              <View key={cat.name} style={s.catRow}>
+                <View style={s.catHeader}>
+                  <Text style={s.catIcon}>{cat.icon}</Text>
+                  <Text style={[s.catName, { color: theme.colors.text }]}>{cat.name}</Text>
+                  <Text style={[s.catAmount, { color: theme.colors.textSecondary }]}>{formatCurrency(cat.total)}</Text>
+                </View>
+                <View style={[s.catBarBg, { backgroundColor: theme.colors.border }]}>
+                  <View style={[s.catBarFill, { width: `${Math.round(cat.pct * 100)}%`, backgroundColor: cat.color }]} />
+                </View>
+              </View>
+            ))}
           </View>
         )}
       </ScrollView>
@@ -206,4 +249,11 @@ const styles = (theme: any) => StyleSheet.create({
   halfValue: { fontSize: 16, fontWeight: '700' },
   emptyChart: { alignItems: 'center', paddingVertical: 28, gap: 10 },
   emptyChartText: { fontSize: 13, textAlign: 'center', lineHeight: 20, maxWidth: 220 },
+  catRow: { marginBottom: 12 },
+  catHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  catIcon: { fontSize: 16 },
+  catName: { fontSize: 13, fontWeight: '600', flex: 1 },
+  catAmount: { fontSize: 13, fontWeight: '600' },
+  catBarBg: { height: 8, borderRadius: 4, overflow: 'hidden' },
+  catBarFill: { height: 8, borderRadius: 4 },
 });

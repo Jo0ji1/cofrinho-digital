@@ -13,6 +13,7 @@ interface SavingsCardProps {
 
 export function SavingsCard({ entry, onLongPress }: SavingsCardProps) {
   const { theme } = useTheme();
+  const hasCategory = !!entry.categoryIcon;
 
   return (
     <Pressable
@@ -27,16 +28,29 @@ export function SavingsCard({ entry, onLongPress }: SavingsCardProps) {
         },
       ]}
     >
-      <View style={[styles.iconBox, { backgroundColor: theme.colors.primary + '20' }]}>
-        <Ionicons name="cash-outline" size={22} color={theme.colors.primary} />
+      <View style={[styles.iconBox, { backgroundColor: (entry.categoryColor || theme.colors.primary) + '20' }]}>
+        {hasCategory ? (
+          <Text style={styles.categoryEmoji}>{entry.categoryIcon}</Text>
+        ) : (
+          <Ionicons name="cash-outline" size={22} color={theme.colors.primary} />
+        )}
       </View>
       <View style={styles.info}>
         <Text style={[styles.description, { color: theme.colors.text }]} numberOfLines={1}>
           {entry.description || 'Economia registrada'}
         </Text>
-        <Text style={[styles.date, { color: theme.colors.textSecondary }]}>
-          {formatDate(entry.date)}
-        </Text>
+        <View style={styles.metaRow}>
+          <Text style={[styles.date, { color: theme.colors.textSecondary }]}>
+            {formatDate(entry.date)}
+          </Text>
+          {entry.categoryName && (
+            <View style={[styles.categoryBadge, { backgroundColor: (entry.categoryColor || '#888') + '20' }]}>
+              <Text style={[styles.categoryBadgeText, { color: entry.categoryColor || '#888' }]}>
+                {entry.categoryName}
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
       <Text style={[styles.amount, { color: theme.colors.primary }]}>
         {formatCurrency(entry.amount)}
@@ -66,8 +80,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
+  categoryEmoji: { fontSize: 20 },
   info: { flex: 1 },
   description: { fontSize: 15, fontWeight: '500', marginBottom: 2 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   date: { fontSize: 12 },
+  categoryBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  categoryBadgeText: { fontSize: 10, fontWeight: '600' },
   amount: { fontSize: 15, fontWeight: '700' },
 });

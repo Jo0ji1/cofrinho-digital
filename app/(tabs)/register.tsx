@@ -8,16 +8,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useData } from '../../contexts/DataContext';
 import { maskCurrency, parseCurrency } from '../../utils/currency';
-import { SavingEntry } from '../../types';
+import { SavingEntry, Category } from '../../types';
 import { Colors } from '../../constants/colors';
 
 export default function RegisterScreen() {
   const { theme } = useTheme();
-  const { addSaving, goal } = useData();
+  const { addSaving, goal, categories } = useData();
 
   const [amountText, setAmountText] = useState('');
   const [description, setDescription] = useState('');
   const [dateText, setDateText] = useState(getTodayStr());
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   function getTodayStr() {
@@ -60,7 +61,7 @@ export default function RegisterScreen() {
 
     Alert.alert(
       'Confirmar registro',
-      `Registrar ${amountText} em "${description || 'Economia registrada'}"?`,
+      `Registrar ${amountText} em "${description || 'Economia registrada'}"${selectedCategory ? ` (${selectedCategory.icon} ${selectedCategory.name})` : ''}?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -74,11 +75,16 @@ export default function RegisterScreen() {
                 description: description.trim(),
                 date: dateObj.toISOString(),
                 createdAt: new Date().toISOString(),
+                categoryId: selectedCategory?.id,
+                categoryName: selectedCategory?.name,
+                categoryIcon: selectedCategory?.icon,
+                categoryColor: selectedCategory?.color,
               };
               await addSaving(entry);
               setAmountText('');
               setDescription('');
               setDateText(getTodayStr());
+              setSelectedCategory(null);
               Alert.alert('✅ Sucesso', 'Economia registrada com sucesso!');
             } finally {
               setSubmitting(false);
@@ -116,6 +122,32 @@ export default function RegisterScreen() {
               onChangeText={v => setAmountText(maskCurrency(v))}
               keyboardType="numeric"
             />
+
+            <Text style={[s.label, { color: theme.colors.textSecondary }]}>Categoria</Text>
+            <View style={s.categoryGrid}>
+              {categories.map(cat => {
+                const isSelected = selectedCategory?.id === cat.id;
+                return (
+                  <TouchableOpacity
+                    key={cat.id}
+                    style={[
+                      s.categoryChip,
+                      {
+                        backgroundColor: isSelected ? cat.color + '30' : theme.colors.background,
+                        borderColor: isSelected ? cat.color : theme.colors.border,
+                      },
+                    ]}
+                    onPress={() => setSelectedCategory(isSelected ? null : cat)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={s.categoryIcon}>{cat.icon}</Text>
+                    <Text style={[s.categoryText, { color: isSelected ? cat.color : theme.colors.textSecondary }]} numberOfLines={1}>
+                      {cat.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
             <Text style={[s.label, { color: theme.colors.textSecondary }]}>Descrição (opcional)</Text>
             <TextInput
@@ -189,6 +221,23 @@ const styles = (theme: any) => StyleSheet.create({
     width: '100%',
   },
   bigInput: { fontSize: 22, fontWeight: '700', textAlign: 'center', paddingVertical: 16 },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    width: '100%',
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    gap: 4,
+  },
+  categoryIcon: { fontSize: 16 },
+  categoryText: { fontSize: 12, fontWeight: '600' },
   btn: {
     flexDirection: 'row',
     alignItems: 'center',

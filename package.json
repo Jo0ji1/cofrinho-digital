@@ -1,6 +1,6 @@
 {
   "name": "cofrinho-digital",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -11,11 +11,15 @@
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@supabase/supabase-js": "^2.103.0",
     "expo": "^55.0.15",
+    "expo-file-system": "~55.0.16",
     "expo-linking": "^55.0.13",
     "expo-router": "^55.0.12",
+    "expo-sharing": "~55.0.18",
     "expo-status-bar": "~55.0.5",
     "react": "^19.2.5",
+    "react-dom": "^19.2.5",
     "react-native": "0.83.4",
     "react-native-chart-kit": "^6.12.0",
     "react-native-gesture-handler": "~2.30.0",

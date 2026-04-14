@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet, Alert, TextInput,
+  View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet, Alert, TextInput, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { File as ExpoFile, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useData } from '../../contexts/DataContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { ModalityCard } from '../../components/ModalityCard';
 import { getModalityInfos } from '../../utils/calculations';
 import { formatCurrency, maskCurrency, parseCurrency } from '../../utils/currency';
@@ -16,7 +19,8 @@ import { Colors } from '../../constants/colors';
 
 export default function SettingsScreen() {
   const { theme, themeMode, setThemeMode } = useTheme();
-  const { goal, setGoal, notifications, setNotifications, resetAll } = useData();
+  const { goal, setGoal, savings, notifications, setNotifications, resetAll } = useData();
+  const { user, signOut, isConfigured } = useAuth();
   const router = useRouter();
 
   const [showModalities, setShowModalities] = useState(false);
@@ -71,6 +75,62 @@ export default function SettingsScreen() {
     setShowModalities(false);
   }
 
+  async function handleLogout() {
+    Alert.alert(
+      'Sair da conta',
+      'Deseja sair da sua conta?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Sair',
+          style: 'destructive',
+          onPress: async () => {
+            await signOut();
+            router.replace('/login');
+          },
+        },
+      ],
+    );
+  }
+
+  async function handleExportCSV() {
+    if (!savings.length) {
+      Alert.alert('Sem dados', 'Você ainda não tem economias registradas para exportar.');
+      return;
+    }
+    try {
+      const header = 'Data,Valor,Descrição,Categoria\n';
+      const sorted = [...savings].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const rows = sorted
+        .map(s => {
+          const date = new Date(s.date).toLocaleDateString('pt-BR');
+          const amount = s.amount.toFixed(2).replace('.', ',');
+          const desc = (s.description || '').replaceAll('"', '""');
+          const cat = s.categoryName || 'Sem categoria';
+          return `${date},"${desc}",${amount},"${cat}"`;
+        })
+        .join('\n');
+      const csv = header + rows;
+
+      if (Platform.OS === 'web') {
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'cofrinho-digital.csv';
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const file = new ExpoFile(Paths.cache, 'cofrinho-digital.csv');
+        file.create({ overwrite: true });
+        file.write(csv);
+        await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', dialogTitle: 'Exportar economias' });
+      }
+    } catch {
+      Alert.alert('Erro', 'Não foi possível exportar os dados.');
+    }
+  }
+
   async function handleReset() {
     Alert.alert(
       'Resetar tudo',
@@ -101,6 +161,29 @@ export default function SettingsScreen() {
     <SafeAreaView style={[s.safe, { backgroundColor: theme.colors.background }]}>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <Text style={[s.screenTitle, { color: theme.colors.text }]}>Ajustes</Text>
+
+        {/* Profile section */}
+        {isConfigured && user && (
+          <View style={[s.section, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="person-circle" size={18} color={Colors.primary} />
+              <Text style={[s.sectionTitle, { color: theme.colors.text }]}>Perfil</Text>
+            </View>
+            <View style={s.profileRow}>
+              <View style={[s.profileAvatar, { backgroundColor: Colors.primary + '20' }]}>
+                <Ionicons name="person" size={28} color={Colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.profileName, { color: theme.colors.text }]}>{user.email?.split('@')[0] || 'Usuário'}</Text>
+                <Text style={[s.profileEmail, { color: theme.colors.textSecondary }]}>{user.email}</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={[s.outlineBtn, { borderColor: Colors.error }]} onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={16} color={Colors.error} />
+              <Text style={[s.outlineBtnText, { color: Colors.error, marginLeft: 6 }]}>Sair da conta</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Goal section */}
         {goal && (
@@ -254,6 +337,10 @@ export default function SettingsScreen() {
             <Ionicons name="trash" size={18} color={Colors.error} />
             <Text style={[s.sectionTitle, { color: theme.colors.text }]}>Dados</Text>
           </View>
+          <TouchableOpacity style={[s.exportBtn, { borderColor: Colors.primary }]} onPress={handleExportCSV}>
+            <Ionicons name="download-outline" size={16} color={Colors.primary} />
+            <Text style={[s.exportBtnText, { color: Colors.primary }]}>Exportar dados (CSV)</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={[s.dangerBtn, { borderColor: Colors.error }]} onPress={handleReset}>
             <Ionicons name="trash-outline" size={16} color={Colors.error} />
             <Text style={[s.dangerBtnText, { color: Colors.error }]}>Resetar todos os dados</Text>
@@ -263,7 +350,7 @@ export default function SettingsScreen() {
         {/* Version */}
         <View style={s.versionRow}>
           <Ionicons name="information-circle-outline" size={14} color={theme.colors.textSecondary} />
-          <Text style={[s.versionText, { color: theme.colors.textSecondary }]}>Cofrinho Digital v1.0.0</Text>
+          <Text style={[s.versionText, { color: theme.colors.textSecondary }]}>Cofrinho Digital v2.0.0</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -287,6 +374,10 @@ const styles = (theme: any) => StyleSheet.create({
   },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   sectionTitle: { fontSize: 16, fontWeight: '700' },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  profileAvatar: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center' },
+  profileName: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
+  profileEmail: { fontSize: 13 },
   infoText: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
   infoSub: { fontSize: 13, marginBottom: 12 },
   label: { fontSize: 13, fontWeight: '600', marginBottom: 6, marginTop: 10 },
@@ -298,10 +389,12 @@ const styles = (theme: any) => StyleSheet.create({
     fontSize: 15,
   },
   outlineBtn: {
+    flexDirection: 'row',
     borderWidth: 1.5,
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 8,
   },
   outlineBtnText: { fontSize: 14, fontWeight: '600' },
@@ -338,8 +431,19 @@ const styles = (theme: any) => StyleSheet.create({
     borderWidth: 1.5,
     borderRadius: 10,
     paddingVertical: 12,
+    marginTop: 10,
   },
   dangerBtnText: { fontSize: 14, fontWeight: '600' },
+  exportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  exportBtnText: { fontSize: 14, fontWeight: '600' },
   versionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 8 },
   versionText: { fontSize: 12 },
 });

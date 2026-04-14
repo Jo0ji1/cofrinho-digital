@@ -8,12 +8,24 @@ export interface Goal {
   activeModality: 'daily' | 'weekly' | 'monthly';
 }
 
+export interface Category {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  isDefault: boolean;
+}
+
 export interface SavingEntry {
   id: string;
   amount: number;
   description: string;
   date: string; // ISO date string
   createdAt: string;
+  categoryId?: string;
+  categoryName?: string;
+  categoryIcon?: string;
+  categoryColor?: string;
 }
 
 export type ModalityType = 'daily' | 'weekly' | 'monthly';
