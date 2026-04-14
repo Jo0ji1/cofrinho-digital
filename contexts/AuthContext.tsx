@@ -87,7 +87,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async (): Promise<{ error?: string }> => {
     try {
       if (Platform.OS === 'web') {
-        return { error: 'Login com Google não disponível na versão web.' };
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo: window.location.origin },
+        });
+        if (error) return { error: translateError(error.message) };
+        return {};
       }
       await GoogleSignin.hasPlayServices();
       const response = await GoogleSignin.signIn();
