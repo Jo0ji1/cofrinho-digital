@@ -3,6 +3,8 @@ import { Goal, SavingEntry, NotificationSettings } from '../types';
 
 const KEYS = {
   GOAL: '@cofrinho:goal',
+  GOALS: '@cofrinho:goals',
+  ACTIVE_GOAL_ID: '@cofrinho:activeGoalId',
   SAVINGS: '@cofrinho:savings',
   NOTIFICATIONS: '@cofrinho:notifications',
   ONBOARDING: '@cofrinho:onboarding',
@@ -10,12 +12,36 @@ const KEYS = {
 };
 
 export const storage = {
+  // Legacy single goal (for migration)
   async getGoal(): Promise<Goal | null> {
     const data = await AsyncStorage.getItem(KEYS.GOAL);
     return data ? JSON.parse(data) : null;
   },
   async setGoal(goal: Goal): Promise<void> {
     await AsyncStorage.setItem(KEYS.GOAL, JSON.stringify(goal));
+  },
+  // Multi-goal
+  async getGoals(): Promise<Goal[]> {
+    const data = await AsyncStorage.getItem(KEYS.GOALS);
+    if (data) return JSON.parse(data);
+    // Migrate from single goal
+    const old = await AsyncStorage.getItem(KEYS.GOAL);
+    if (old) {
+      const goal = JSON.parse(old);
+      const goals = [goal];
+      await AsyncStorage.setItem(KEYS.GOALS, JSON.stringify(goals));
+      return goals;
+    }
+    return [];
+  },
+  async setGoals(goals: Goal[]): Promise<void> {
+    await AsyncStorage.setItem(KEYS.GOALS, JSON.stringify(goals));
+  },
+  async getActiveGoalId(): Promise<string | null> {
+    return AsyncStorage.getItem(KEYS.ACTIVE_GOAL_ID);
+  },
+  async setActiveGoalId(id: string): Promise<void> {
+    await AsyncStorage.setItem(KEYS.ACTIVE_GOAL_ID, id);
   },
   async getSavings(): Promise<SavingEntry[]> {
     const data = await AsyncStorage.getItem(KEYS.SAVINGS);

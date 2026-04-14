@@ -5,13 +5,19 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
 interface DataContextType {
-  goal: Goal | null;
+  goals: Goal[];
+  activeGoal: Goal | null;
+  goal: Goal | null; // alias for activeGoal (backward compat)
   savings: SavingEntry[];
   categories: Category[];
   notifications: NotificationSettings;
   onboardingCompleted: boolean;
   isLoading: boolean;
   setGoal: (goal: Goal) => Promise<void>;
+  addGoal: (goal: Goal) => Promise<void>;
+  updateGoal: (goal: Goal) => Promise<void>;
+  deleteGoal: (id: string) => Promise<void>;
+  setActiveGoal: (id: string) => Promise<void>;
   addSaving: (entry: SavingEntry) => Promise<void>;
   updateSaving: (entry: SavingEntry) => Promise<void>;
   deleteSaving: (id: string) => Promise<void>;
@@ -36,7 +42,8 @@ const DEFAULT_CATEGORIES: Category[] = [
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [goal, setGoalState] = useState<Goal | null>(null);
+  const [goals, setGoalsState] = useState<Goal[]>([]);
+  const [activeGoalId, setActiveGoalIdState] = useState<string | null>(null);
   const [savings, setSavingsState] = useState<SavingEntry[]>([]);
   const [categories, setCategoriesState] = useState<Category[]>(DEFAULT_CATEGORIES);
   const [notifications, setNotificationsState] = useState<NotificationSettings>({
@@ -45,17 +52,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  const activeGoal = goals.find(g => g.id === activeGoalId) || goals[0] || null;
+
   const loadFromSupabase = useCallback(async () => {
     if (!user) return null;
     try {
-      // Carregar meta
-      const { data: goalData } = await supabase
+      // Carregar todas as metas
+      const { data: goalsData } = await supabase
         .from('goals')
         .select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+        .order('created_at', { ascending: false });
 
       // Carregar economias
       const { data: savingsData } = await supabase
@@ -71,15 +78,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
         .or('is_default.eq.true,user_id.eq.' + user.id)
         .order('name');
 
-      const mappedGoal: Goal | null = goalData ? {
-        id: goalData.id,
-        name: goalData.name,
-        userName: goalData.user_name || '',
-        targetAmount: Number(goalData.target_amount),
-        targetDate: goalData.target_date,
-        createdAt: goalData.created_at,
-        activeModality: goalData.active_modality || 'monthly',
-      } : null;
+      const mappedGoals: Goal[] = (goalsData || []).map((g: any) => ({
+        id: g.id,
+        name: g.name,
+        userName: g.user_name || '',
+        targetAmount: Number(g.target_amount),
+        targetDate: g.target_date,
+        createdAt: g.created_at,
+        activeModality: g.active_modality || 'monthly',
+      }));
 
       const mappedSavings: SavingEntry[] = (savingsData || []).map((s: any) => {
         const cat = (catData || []).find((c: any) => c.id === s.category_id);
@@ -89,6 +96,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           description: s.description || '',
           date: s.date,
           createdAt: s.created_at,
+          goalId: s.goal_id || (mappedGoals[0]?.id ?? undefined),
           categoryId: s.category_id,
           categoryName: cat?.name,
           categoryIcon: cat?.icon,
@@ -105,7 +113,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }));
 
       return {
-        goal: mappedGoal,
+        goals: mappedGoals,
         savings: mappedSavings,
         categories: mappedCategories.length > 0 ? mappedCategories : DEFAULT_CATEGORIES,
       };
@@ -121,9 +129,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (isSupabaseConfigured() && user) {
         const supaData = await loadFromSupabase();
         if (supaData) {
-          setGoalState(supaData.goal);
+          setGoalsState(supaData.goals);
           setSavingsState(supaData.savings);
           setCategoriesState(supaData.categories);
+          // Carregar active goal ID
+          const storedActiveId = await storage.getActiveGoalId();
+          const validId = supaData.goals.find(g => g.id === storedActiveId)?.id || supaData.goals[0]?.id || null;
+          setActiveGoalIdState(validId);
           // Verificar onboarding do perfil
           const { data: profile } = await supabase
             .from('profiles')
@@ -137,16 +149,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
 
       // Fallback: AsyncStorage local
-      const [g, s, n, o] = await Promise.all([
-        storage.getGoal(),
+      const [gs, s, n, o, aid] = await Promise.all([
+        storage.getGoals(),
         storage.getSavings(),
         storage.getNotifications(),
         storage.getOnboardingCompleted(),
+        storage.getActiveGoalId(),
       ]);
-      setGoalState(g);
+      setGoalsState(gs);
       setSavingsState(s);
       setNotificationsState(n);
       setOnboardingCompleted(o);
+      const validId = gs.find(g => g.id === aid)?.id || gs[0]?.id || null;
+      setActiveGoalIdState(validId);
     } finally {
       setIsLoading(false);
     }
@@ -154,7 +169,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // setGoal: upsert - if exists update, else add + set active
   const setGoal = async (g: Goal) => {
+    const exists = goals.find(x => x.id === g.id);
+    if (exists) {
+      await updateGoal(g);
+    } else {
+      await addGoal(g);
+    }
+  };
+
+  const addGoal = async (g: Goal) => {
     if (isSupabaseConfigured() && user) {
       await supabase.from('goals').upsert({
         id: g.id,
@@ -166,23 +191,71 @@ export function DataProvider({ children }: { children: ReactNode }) {
         active_modality: g.activeModality,
       });
     }
-    await storage.setGoal(g);
-    setGoalState(g);
+    const updated = [g, ...goals];
+    await storage.setGoals(updated);
+    await storage.setActiveGoalId(g.id);
+    setGoalsState(updated);
+    setActiveGoalIdState(g.id);
+  };
+
+  const updateGoal = async (g: Goal) => {
+    if (isSupabaseConfigured() && user) {
+      await supabase.from('goals').upsert({
+        id: g.id,
+        user_id: user.id,
+        name: g.name,
+        user_name: g.userName,
+        target_amount: g.targetAmount,
+        target_date: g.targetDate,
+        active_modality: g.activeModality,
+      });
+    }
+    const updated = goals.map(x => x.id === g.id ? g : x);
+    await storage.setGoals(updated);
+    setGoalsState(updated);
+  };
+
+  const deleteGoal = async (id: string) => {
+    if (isSupabaseConfigured() && user) {
+      // Deletar economias do objetivo primeiro
+      await supabase.from('savings').delete().eq('goal_id', id);
+      await supabase.from('goals').delete().eq('id', id);
+    }
+    const updatedGoals = goals.filter(g => g.id !== id);
+    const updatedSavings = savings.filter(s => s.goalId !== id);
+    await storage.setGoals(updatedGoals);
+    await storage.setSavings(updatedSavings);
+    setGoalsState(updatedGoals);
+    setSavingsState(updatedSavings);
+    // Se deletou o ativo, muda para o primeiro disponível
+    if (activeGoalId === id) {
+      const newId = updatedGoals[0]?.id || null;
+      if (newId) await storage.setActiveGoalId(newId);
+      setActiveGoalIdState(newId);
+    }
+  };
+
+  const setActiveGoalFn = async (id: string) => {
+    await storage.setActiveGoalId(id);
+    setActiveGoalIdState(id);
   };
 
   const addSaving = async (entry: SavingEntry) => {
+    // Garantir que goalId está definido
+    const entryWithGoal = { ...entry, goalId: entry.goalId || activeGoal?.id };
     if (isSupabaseConfigured() && user) {
       await supabase.from('savings').insert({
-        id: entry.id,
+        id: entryWithGoal.id,
         user_id: user.id,
-        amount: entry.amount,
-        description: entry.description,
-        date: entry.date,
-        category_id: entry.categoryId || null,
-        created_at: entry.createdAt,
+        goal_id: entryWithGoal.goalId || null,
+        amount: entryWithGoal.amount,
+        description: entryWithGoal.description,
+        date: entryWithGoal.date,
+        category_id: entryWithGoal.categoryId || null,
+        created_at: entryWithGoal.createdAt,
       });
     }
-    const updated = [entry, ...savings];
+    const updated = [entryWithGoal, ...savings];
     await storage.setSavings(updated);
     setSavingsState(updated);
   };
@@ -203,6 +276,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         description: entry.description,
         date: entry.date,
         category_id: entry.categoryId || null,
+        goal_id: entry.goalId || null,
       }).eq('id', entry.id);
     }
     const updated = savings.map(s => s.id === entry.id ? entry : s);
@@ -230,7 +304,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       await supabase.from('profiles').update({ onboarding_completed: false }).eq('id', user.id);
     }
     await storage.clearAll();
-    setGoalState(null);
+    setGoalsState([]);
+    setActiveGoalIdState(null);
     setSavingsState([]);
     setNotificationsState({ enabled: false, frequency: 'daily', hour: 20, minute: 0 });
     setOnboardingCompleted(false);
@@ -238,8 +313,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   return (
     <DataContext.Provider value={{
-      goal, savings, categories, notifications, onboardingCompleted, isLoading,
-      setGoal, addSaving, updateSaving, deleteSaving, setNotifications,
+      goals, activeGoal, goal: activeGoal,
+      savings, categories, notifications, onboardingCompleted, isLoading,
+      setGoal, addGoal, updateGoal, deleteGoal, setActiveGoal: setActiveGoalFn,
+      addSaving, updateSaving, deleteSaving, setNotifications,
       completeOnboarding, resetAll, refresh: loadData,
     }}>
       {children}

@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, Alert, KeyboardAvoidingView, Platform,
+  StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useData } from '../contexts/DataContext';
+import { useToast } from '../components/Toast';
 import { maskCurrency, parseCurrency } from '../utils/currency';
 import { Goal } from '../types';
 import { Colors } from '../constants/colors';
@@ -17,6 +18,7 @@ const MIN_VALID_YEAR = 2000;
 export default function OnboardingScreen() {
   const { theme } = useTheme();
   const { setGoal } = useData();
+  const { show } = useToast();
   const router = useRouter();
 
   const [userName, setUserName] = useState('');
@@ -49,21 +51,21 @@ export default function OnboardingScreen() {
 
   async function handleSubmit() {
     if (!goalName.trim()) {
-      Alert.alert('Atenção', 'Por favor, informe o nome do seu objetivo.');
+      show({ type: 'warning', title: 'Atenção', message: 'Por favor, informe o nome do seu objetivo.' });
       return;
     }
     const amount = parseCurrency(targetAmountText);
     if (amount <= 0) {
-      Alert.alert('Atenção', 'Por favor, informe um valor válido para o objetivo.');
+      show({ type: 'warning', title: 'Atenção', message: 'Por favor, informe um valor válido para o objetivo.' });
       return;
     }
     const dateObj = parseDate(targetDate);
     if (!dateObj) {
-      Alert.alert('Atenção', 'Por favor, informe uma data válida no formato DD/MM/AAAA.');
+      show({ type: 'warning', title: 'Atenção', message: 'Por favor, informe uma data válida no formato DD/MM/AAAA.' });
       return;
     }
     if (dateObj <= new Date()) {
-      Alert.alert('Atenção', 'A data do objetivo deve ser futura.');
+      show({ type: 'warning', title: 'Atenção', message: 'A data do objetivo deve ser futura.' });
       return;
     }
 

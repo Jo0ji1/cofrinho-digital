@@ -22,6 +22,7 @@ export interface SavingEntry {
   description: string;
   date: string; // ISO date string
   createdAt: string;
+  goalId?: string;
   categoryId?: string;
   categoryName?: string;
   categoryIcon?: string;
@@ -47,7 +48,7 @@ export interface NotificationSettings {
 }
 
 export interface AppData {
-  goal: Goal | null;
+  goals: Goal[];
   savings: SavingEntry[];
   notifications: NotificationSettings;
   onboardingCompleted: boolean;

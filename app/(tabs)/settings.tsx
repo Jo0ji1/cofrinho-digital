@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet, TextInput, Platform,
+  Modal, Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,20 +17,24 @@ import { ModalityCard } from '../../components/ModalityCard';
 import { getModalityInfos } from '../../utils/calculations';
 import { formatCurrency, maskCurrency, parseCurrency } from '../../utils/currency';
 import { requestNotificationPermissions, scheduleNotification, cancelAllNotifications } from '../../utils/notifications';
-import { ModalityType } from '../../types';
+import { ModalityType, Goal } from '../../types';
 import { Colors } from '../../constants/colors';
 
 export default function SettingsScreen() {
   const { theme, themeMode, setThemeMode } = useTheme();
-  const { goal, setGoal, savings, notifications, setNotifications, resetAll } = useData();
+  const { goals, activeGoal, setActiveGoal, updateGoal, addGoal, deleteGoal, savings, notifications, setNotifications, resetAll } = useData();
   const { user, signOut, isConfigured } = useAuth();
   const { show } = useToast();
   const router = useRouter();
 
   const [showModalities, setShowModalities] = useState(false);
   const [editingGoal, setEditingGoal] = useState(false);
-  const [goalName, setGoalName] = useState(goal?.name || '');
-  const [goalAmount, setGoalAmount] = useState(goal ? formatCurrency(goal.targetAmount) : '');
+  const [goalName, setGoalName] = useState(activeGoal?.name || '');
+  const [goalAmount, setGoalAmount] = useState(activeGoal ? formatCurrency(activeGoal.targetAmount) : '');
+  const [showNewGoal, setShowNewGoal] = useState(false);
+  const [newGoalName, setNewGoalName] = useState('');
+  const [newGoalAmount, setNewGoalAmount] = useState('');
+  const [newGoalDate, setNewGoalDate] = useState('');
   const [confirmModal, setConfirmModal] = useState<{
     visible: boolean; title: string; message: string;
     confirmText: string; destructive: boolean;
@@ -43,7 +48,7 @@ export default function SettingsScreen() {
     setConfirmModal(prev => ({ ...prev, visible: false }));
   }
 
-  const modalities = goal ? getModalityInfos(goal, []) : [];
+  const modalities = activeGoal ? getModalityInfos(activeGoal, []) : [];
 
   async function handleNotificationToggle(value: boolean) {
     if (value) {
@@ -69,7 +74,7 @@ export default function SettingsScreen() {
   }
 
   async function handleSaveGoal() {
-    if (!goal) return;
+    if (!activeGoal) return;
     if (!goalName.trim()) {
       show({ type: 'warning', title: 'Atenção', message: 'Informe um nome para o objetivo.' });
       return;
@@ -79,15 +84,85 @@ export default function SettingsScreen() {
       show({ type: 'warning', title: 'Atenção', message: 'Informe um valor válido.' });
       return;
     }
-    await setGoal({ ...goal, name: goalName.trim(), targetAmount: amount });
+    await updateGoal({ ...activeGoal, name: goalName.trim(), targetAmount: amount });
     setEditingGoal(false);
     show({ type: 'success', title: 'Salvo', message: 'Objetivo atualizado com sucesso!' });
   }
 
   async function handleSelectModality(type: ModalityType) {
-    if (!goal) return;
-    await setGoal({ ...goal, activeModality: type });
+    if (!activeGoal) return;
+    await updateGoal({ ...activeGoal, activeModality: type });
     setShowModalities(false);
+  }
+
+  function handleDateChange(text: string) {
+    const digits = text.replace(/\D/g, '');
+    let formatted = digits;
+    if (digits.length > 2) formatted = digits.slice(0, 2) + '/' + digits.slice(2);
+    if (digits.length > 4) formatted = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4, 8);
+    setNewGoalDate(formatted);
+  }
+
+  function parseDate(dateStr: string): Date | null {
+    const parts = dateStr.split('/');
+    if (parts.length !== 3) return null;
+    const [day, month, year] = parts.map(Number);
+    if (!day || !month || !year || year < 2000) return null;
+    const d = new Date(year, month - 1, day);
+    if (isNaN(d.getTime())) return null;
+    return d;
+  }
+
+  async function handleAddGoal() {
+    if (!newGoalName.trim()) {
+      show({ type: 'warning', title: 'Atenção', message: 'Informe o nome do objetivo.' });
+      return;
+    }
+    const amount = parseCurrency(newGoalAmount);
+    if (amount <= 0) {
+      show({ type: 'warning', title: 'Atenção', message: 'Informe um valor válido.' });
+      return;
+    }
+    const dateObj = parseDate(newGoalDate);
+    if (!dateObj || dateObj <= new Date()) {
+      show({ type: 'warning', title: 'Atenção', message: 'Informe uma data futura válida (DD/MM/AAAA).' });
+      return;
+    }
+    const goal: Goal = {
+      id: Date.now().toString(),
+      name: newGoalName.trim(),
+      userName: activeGoal?.userName || user?.email?.split('@')[0] || 'Você',
+      targetAmount: amount,
+      targetDate: dateObj.toISOString(),
+      createdAt: new Date().toISOString(),
+      activeModality: 'daily',
+    };
+    await addGoal(goal);
+    setShowNewGoal(false);
+    setNewGoalName('');
+    setNewGoalAmount('');
+    setNewGoalDate('');
+    show({ type: 'success', title: 'Criado!', message: `Objetivo "${goal.name}" adicionado e ativado.` });
+  }
+
+  function handleDeleteGoal(goalToDelete: Goal) {
+    if (goals.length <= 1) {
+      show({ type: 'warning', title: 'Atenção', message: 'Você precisa ter pelo menos um objetivo.' });
+      return;
+    }
+    const savingsCount = savings.filter(s => s.goalId === goalToDelete.id).length;
+    showConfirm({
+      title: 'Excluir objetivo',
+      message: `Excluir "${goalToDelete.name}"? ${savingsCount > 0 ? `${savingsCount} economia(s) serão removidas.` : ''}`,
+      confirmText: 'Excluir',
+      destructive: true,
+      icon: 'trash-outline',
+      onConfirm: async () => {
+        hideConfirm();
+        await deleteGoal(goalToDelete.id);
+        show({ type: 'success', title: 'Excluído', message: 'Objetivo removido.' });
+      },
+    });
   }
 
   function handleLogout() {
@@ -194,62 +269,121 @@ export default function SettingsScreen() {
           </View>
         )}
 
-        {/* Goal section */}
-        {goal && (
-          <View style={[s.section, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <View style={s.sectionHeader}>
-              <Ionicons name="flag" size={18} color={Colors.primary} />
-              <Text style={[s.sectionTitle, { color: theme.colors.text }]}>Objetivo</Text>
-            </View>
-            {!editingGoal ? (
-              <>
-                <Text style={[s.infoText, { color: theme.colors.text }]}>{goal.name}</Text>
-                <Text style={[s.infoSub, { color: theme.colors.textSecondary }]}>{formatCurrency(goal.targetAmount)}</Text>
-                <TouchableOpacity style={[s.outlineBtn, { borderColor: Colors.primary }]} onPress={() => setEditingGoal(true)}>
-                  <Text style={[s.outlineBtnText, { color: Colors.primary }]}>Editar objetivo</Text>
+        {/* Goals section */}
+        <View style={[s.section, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View style={s.sectionHeader}>
+            <Ionicons name="flag" size={18} color={Colors.primary} />
+            <Text style={[s.sectionTitle, { color: theme.colors.text }]}>Objetivos ({goals.length})</Text>
+          </View>
+
+          {/* Goal list */}
+          {goals.map(g => {
+            const isActive = g.id === activeGoal?.id;
+            const gSavings = savings.filter(sv => !sv.goalId || sv.goalId === g.id);
+            const gTotal = gSavings.reduce((sum, sv) => sum + sv.amount, 0);
+            const gPct = g.targetAmount > 0 ? Math.min(1, gTotal / g.targetAmount) : 0;
+            return (
+              <View
+                key={g.id}
+                style={[
+                  s.goalItem,
+                  {
+                    backgroundColor: isActive ? Colors.primary + '08' : theme.colors.background,
+                    borderColor: isActive ? Colors.primary + '40' : theme.colors.border,
+                  },
+                ]}
+              >
+                <TouchableOpacity
+                  style={s.goalItemTop}
+                  onPress={() => setActiveGoal(g.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[s.goalDot, { backgroundColor: isActive ? Colors.primary : theme.colors.border }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.goalItemName, { color: theme.colors.text }]}>{g.name}</Text>
+                    <Text style={[s.goalItemSub, { color: theme.colors.textSecondary }]}>
+                      {formatCurrency(gTotal)} / {formatCurrency(g.targetAmount)} ({Math.round(gPct * 100)}%)
+                    </Text>
+                  </View>
+                  {isActive && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />}
                 </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <Text style={[s.label, { color: theme.colors.textSecondary }]}>Nome do objetivo</Text>
-                <TextInput
-                  style={[s.input, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
-                  value={goalName}
-                  onChangeText={setGoalName}
-                  placeholder="Nome do objetivo"
-                  placeholderTextColor={theme.colors.textSecondary}
-                />
-                <Text style={[s.label, { color: theme.colors.textSecondary }]}>Valor alvo</Text>
-                <TextInput
-                  style={[s.input, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
-                  value={goalAmount}
-                  onChangeText={v => setGoalAmount(maskCurrency(v))}
-                  placeholder="R$ 0,00"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  keyboardType="numeric"
-                />
-                <View style={s.editBtnsRow}>
-                  <TouchableOpacity style={[s.outlineBtn, { borderColor: theme.colors.border, flex: 1 }]} onPress={() => setEditingGoal(false)}>
-                    <Text style={[s.outlineBtnText, { color: theme.colors.textSecondary }]}>Cancelar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[s.solidBtn, { flex: 1 }]} onPress={handleSaveGoal}>
-                    <Text style={s.solidBtnText}>Salvar</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
+                {isActive && (
+                  <View style={s.goalItemActions}>
+                    <TouchableOpacity
+                      style={[s.goalActionBtn, { borderColor: Colors.primary + '40' }]}
+                      onPress={() => {
+                        setGoalName(g.name);
+                        setGoalAmount(formatCurrency(g.targetAmount));
+                        setEditingGoal(true);
+                      }}
+                    >
+                      <Ionicons name="pencil-outline" size={14} color={Colors.primary} />
+                      <Text style={[s.goalActionText, { color: Colors.primary }]}>Editar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.goalActionBtn, { borderColor: Colors.error + '40' }]}
+                      onPress={() => handleDeleteGoal(g)}
+                    >
+                      <Ionicons name="trash-outline" size={14} color={Colors.error} />
+                      <Text style={[s.goalActionText, { color: Colors.error }]}>Excluir</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            );
+          })}
+
+          {/* Add new goal */}
+          <TouchableOpacity
+            style={[s.addGoalBtn, { borderColor: Colors.primary }]}
+            onPress={() => setShowNewGoal(true)}
+          >
+            <Ionicons name="add-circle-outline" size={18} color={Colors.primary} />
+            <Text style={[s.addGoalText, { color: Colors.primary }]}>Novo objetivo</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Edit Goal Modal */}
+        {editingGoal && (
+          <View style={[s.section, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <Text style={[s.sectionTitle, { color: theme.colors.text, marginBottom: 12 }]}>Editar Objetivo</Text>
+            <Text style={[s.label, { color: theme.colors.textSecondary }]}>Nome do objetivo</Text>
+            <TextInput
+              style={[s.input, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+              value={goalName}
+              onChangeText={setGoalName}
+              placeholder="Nome do objetivo"
+              placeholderTextColor={theme.colors.textSecondary}
+            />
+            <Text style={[s.label, { color: theme.colors.textSecondary }]}>Valor alvo</Text>
+            <TextInput
+              style={[s.input, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+              value={goalAmount}
+              onChangeText={v => setGoalAmount(maskCurrency(v))}
+              placeholder="R$ 0,00"
+              placeholderTextColor={theme.colors.textSecondary}
+              keyboardType="numeric"
+            />
+            <View style={s.editBtnsRow}>
+              <TouchableOpacity style={[s.outlineBtn, { borderColor: theme.colors.border, flex: 1 }]} onPress={() => setEditingGoal(false)}>
+                <Text style={[s.outlineBtnText, { color: theme.colors.textSecondary }]}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.solidBtn, { flex: 1 }]} onPress={handleSaveGoal}>
+                <Text style={s.solidBtnText}>Salvar</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
         {/* Modality */}
-        {goal && (
+        {activeGoal && (
           <View style={[s.section, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <View style={s.sectionHeader}>
               <Ionicons name="swap-horizontal" size={18} color={Colors.primary} />
               <Text style={[s.sectionTitle, { color: theme.colors.text }]}>Modalidade</Text>
             </View>
             <Text style={[s.infoSub, { color: theme.colors.textSecondary }]}>
-              Atual: {goal.activeModality === 'daily' ? 'Diária' : goal.activeModality === 'weekly' ? 'Semanal' : 'Mensal'}
+              Atual: {activeGoal.activeModality === 'daily' ? 'Diária' : activeGoal.activeModality === 'weekly' ? 'Semanal' : 'Mensal'}
             </Text>
             <TouchableOpacity style={[s.outlineBtn, { borderColor: Colors.primary }]} onPress={() => setShowModalities(!showModalities)}>
               <Text style={[s.outlineBtnText, { color: Colors.primary }]}>
@@ -262,7 +396,7 @@ export default function SettingsScreen() {
                   <ModalityCard
                     key={m.type}
                     modality={m}
-                    selected={goal.activeModality === m.type}
+                    selected={activeGoal.activeModality === m.type}
                     onSelect={() => handleSelectModality(m.type)}
                   />
                 ))}
@@ -359,7 +493,7 @@ export default function SettingsScreen() {
         {/* Version */}
         <View style={s.versionRow}>
           <Ionicons name="information-circle-outline" size={14} color={theme.colors.textSecondary} />
-          <Text style={[s.versionText, { color: theme.colors.textSecondary }]}>Cofrinho Digital v2.1.0</Text>
+          <Text style={[s.versionText, { color: theme.colors.textSecondary }]}>Cofrinho Digital v2.2.0</Text>
         </View>
       </ScrollView>
 
@@ -373,6 +507,55 @@ export default function SettingsScreen() {
         onConfirm={confirmModal.onConfirm}
         onCancel={hideConfirm}
       />
+
+      {/* New Goal Modal */}
+      <Modal visible={showNewGoal} transparent animationType="fade" onRequestClose={() => setShowNewGoal(false)}>
+        <Pressable style={s.modalOverlay} onPress={() => setShowNewGoal(false)}>
+          <Pressable style={[s.modalContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <Text style={[s.modalTitle, { color: theme.colors.text }]}>Novo Objetivo</Text>
+
+            <Text style={[s.label, { color: theme.colors.textSecondary }]}>Nome do objetivo</Text>
+            <TextInput
+              style={[s.input, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+              value={newGoalName}
+              onChangeText={setNewGoalName}
+              placeholder="Ex: Novo celular"
+              placeholderTextColor={theme.colors.textSecondary}
+              maxLength={60}
+            />
+
+            <Text style={[s.label, { color: theme.colors.textSecondary }]}>Valor alvo</Text>
+            <TextInput
+              style={[s.input, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+              value={newGoalAmount}
+              onChangeText={v => setNewGoalAmount(maskCurrency(v))}
+              placeholder="R$ 0,00"
+              placeholderTextColor={theme.colors.textSecondary}
+              keyboardType="numeric"
+            />
+
+            <Text style={[s.label, { color: theme.colors.textSecondary }]}>Data alvo (DD/MM/AAAA)</Text>
+            <TextInput
+              style={[s.input, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+              value={newGoalDate}
+              onChangeText={handleDateChange}
+              placeholder="Ex: 31/12/2026"
+              placeholderTextColor={theme.colors.textSecondary}
+              keyboardType="numeric"
+              maxLength={10}
+            />
+
+            <View style={s.editBtnsRow}>
+              <TouchableOpacity style={[s.outlineBtn, { borderColor: theme.colors.border, flex: 1 }]} onPress={() => setShowNewGoal(false)}>
+                <Text style={[s.outlineBtnText, { color: theme.colors.textSecondary }]}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[s.solidBtn, { flex: 1 }]} onPress={handleAddGoal}>
+                <Text style={s.solidBtnText}>Criar</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -466,4 +649,55 @@ const styles = (theme: any) => StyleSheet.create({
   exportBtnText: { fontSize: 14, fontWeight: '600' },
   versionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 8 },
   versionText: { fontSize: 12 },
+  // Goal management
+  goalItem: {
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1.5,
+    marginBottom: 8,
+  },
+  goalItemTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  goalDot: { width: 10, height: 10, borderRadius: 5 },
+  goalItemName: { fontSize: 15, fontWeight: '600' },
+  goalItemSub: { fontSize: 12, marginTop: 2 },
+  goalItemActions: { flexDirection: 'row', gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: theme.colors.border },
+  goalActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 7,
+  },
+  goalActionText: { fontSize: 12, fontWeight: '600' },
+  addGoalBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1.5,
+    borderRadius: 10,
+    borderStyle: 'dashed',
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  addGoalText: { fontSize: 14, fontWeight: '600' },
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContainer: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
 });

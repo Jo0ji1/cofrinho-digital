@@ -24,10 +24,13 @@ const FILTERS: { label: string; value: FilterPeriod }[] = [
 
 export default function HistoryScreen() {
   const { theme } = useTheme();
-  const { deleteSaving, updateSaving, categories, refresh } = useData();
+  const { deleteSaving, updateSaving, categories, refresh, goals, activeGoal } = useData();
   const { show } = useToast();
   const [filter, setFilter] = useState<FilterPeriod>('all');
-  const { savings, total } = useSavings(filter);
+  const [goalFilter, setGoalFilter] = useState<string | null>(null); // null = all goals
+  const { savings, total } = useSavings(filter, goalFilter);
+
+  const hasMultipleGoals = goals.length > 1;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -144,6 +147,29 @@ export default function HistoryScreen() {
           <Text style={[s.countText, { color: theme.colors.textSecondary }]}>{filtered.length} registros</Text>
         </View>
 
+        {/* Goal filter */}
+        {hasMultipleGoals && (
+          <View style={s.filterRow}>
+            <TouchableOpacity
+              style={[s.filterBtn, { backgroundColor: goalFilter === null ? Colors.primary : theme.colors.card, borderColor: goalFilter === null ? Colors.primary : theme.colors.border }]}
+              onPress={() => setGoalFilter(null)}
+              activeOpacity={0.8}
+            >
+              <Text style={[s.filterText, { color: goalFilter === null ? '#fff' : theme.colors.textSecondary }]}>Todos</Text>
+            </TouchableOpacity>
+            {goals.map(g => (
+              <TouchableOpacity
+                key={g.id}
+                style={[s.filterBtn, { backgroundColor: goalFilter === g.id ? Colors.primary : theme.colors.card, borderColor: goalFilter === g.id ? Colors.primary : theme.colors.border }]}
+                onPress={() => setGoalFilter(g.id)}
+                activeOpacity={0.8}
+              >
+                <Text style={[s.filterText, { color: goalFilter === g.id ? '#fff' : theme.colors.textSecondary }]} numberOfLines={1}>{g.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         {/* Total */}
         <View style={[s.totalCard, { backgroundColor: Colors.primary + '15', borderColor: Colors.primary + '30' }]}>
           <Text style={[s.totalLabel, { color: theme.colors.textSecondary }]}>Total economizado</Text>
@@ -189,6 +215,14 @@ export default function HistoryScreen() {
                           <Text style={[s.badgeText, { color: item.categoryColor || '#888' }]}>{item.categoryName}</Text>
                         </View>
                       )}
+                      {hasMultipleGoals && item.goalId && (() => {
+                        const g = goals.find(gl => gl.id === item.goalId);
+                        return g ? (
+                          <View style={[s.badge, { backgroundColor: Colors.primary + '15' }]}>
+                            <Text style={[s.badgeText, { color: Colors.primary }]}>🎯 {g.name}</Text>
+                          </View>
+                        ) : null;
+                      })()}
                     </View>
                   </View>
                   <Text style={[s.cardAmount, { color: Colors.primary }]}>{formatCurrency(item.amount)}</Text>

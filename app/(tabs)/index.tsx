@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, useWindowDimensions, RefreshControl,
+  TouchableOpacity, Modal, Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LineChart } from 'react-native-chart-kit';
@@ -24,15 +25,19 @@ const MODALITY_LABELS: Record<string, string> = {
 export default function HomeScreen() {
   const { theme, isDark } = useTheme();
   const data = useGoal();
-  const { savings, categories, refresh } = useData();
+  const { goals, activeGoal, setActiveGoal, savings, categories, refresh } = useData();
   const { width: screenWidth } = useWindowDimensions();
   const [refreshing, setRefreshing] = useState(false);
+  const [showGoalPicker, setShowGoalPicker] = useState(false);
+  const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
 
   const chartWidth = Math.min(screenWidth, 480) - 64;
+  const goalSavings = data.goalSavings || [];
 
+  // Chart data - using goal-filtered savings
   const chartData = useMemo(() => {
-    if (!savings.length) return null;
-    const sorted = [...savings].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    if (!goalSavings.length) return null;
+    const sorted = [...goalSavings].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     const last7 = sorted.slice(-7);
     let cum = 0;
     const labels: string[] = [];
@@ -47,13 +52,31 @@ export default function HomeScreen() {
       labels.unshift('');
       values.unshift(0);
     }
-    return { labels, datasets: [{ data: values }] };
-  }, [savings]);
+    return { labels, datasets: [{ data: values }], savings: last7 };
+  }, [goalSavings]);
 
+  // Selected point details for interactive chart
+  const selectedPointDetails = useMemo(() => {
+    if (selectedPointIndex === null || !chartData) return null;
+    const sorted = [...goalSavings].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const last7 = sorted.slice(-7);
+    // If we padded with a dummy point, adjust index
+    const offset = chartData.labels[0] === '' ? -1 : 0;
+    const realIndex = selectedPointIndex + offset;
+    if (realIndex < 0 || realIndex >= last7.length) return null;
+    const entry = last7[realIndex];
+    // Find all entries on the same date
+    const dateKey = entry.date.split('T')[0];
+    const dayEntries = goalSavings.filter(s => s.date.split('T')[0] === dateKey);
+    const dayTotal = dayEntries.reduce((sum, e) => sum + e.amount, 0);
+    return { date: entry.date, entries: dayEntries, total: dayTotal };
+  }, [selectedPointIndex, chartData, goalSavings]);
+
+  // Category stats - filtered by goal
   const categoryStats = useMemo(() => {
-    if (!savings.length) return [];
+    if (!goalSavings.length) return [];
     const map: Record<string, { name: string; icon: string; color: string; total: number }> = {};
-    savings.forEach(s => {
+    goalSavings.forEach(s => {
       const key = s.categoryName || 'Sem categoria';
       if (!map[key]) {
         map[key] = {
@@ -68,15 +91,16 @@ export default function HomeScreen() {
     const list = Object.values(map).sort((a, b) => b.total - a.total);
     const max = list[0]?.total || 1;
     return list.map(c => ({ ...c, pct: c.total / max }));
-  }, [savings]);
+  }, [goalSavings]);
 
+  // Monthly summary - filtered by goal
   const monthSummary = useMemo(() => {
     const now = new Date();
-    const thisMonth = savings.filter(s => {
+    const thisMonth = goalSavings.filter(s => {
       const d = new Date(s.date);
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
-    const lastMonth = savings.filter(s => {
+    const lastMonth = goalSavings.filter(s => {
       const d = new Date(s.date);
       const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       return d.getMonth() === lm.getMonth() && d.getFullYear() === lm.getFullYear();
@@ -85,12 +109,41 @@ export default function HomeScreen() {
     const lastTotal = lastMonth.reduce((sum, e) => sum + e.amount, 0);
     const diff = lastTotal > 0 ? ((thisTotal - lastTotal) / lastTotal) * 100 : 0;
     return { thisTotal, lastTotal, count: thisMonth.length, diff };
-  }, [savings]);
+  }, [goalSavings]);
+
+  // Streak calculation
+  const streak = useMemo(() => {
+    if (!goalSavings.length) return 0;
+    const uniqueDays = [...new Set(goalSavings.map(s => s.date.split('T')[0]))].sort().reverse();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0];
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    // Streak must start from today or yesterday
+    if (uniqueDays[0] !== todayStr && uniqueDays[0] !== yesterdayStr) return 0;
+    let count = 1;
+    for (let i = 1; i < uniqueDays.length; i++) {
+      const prev = new Date(uniqueDays[i - 1]);
+      const cur = new Date(uniqueDays[i]);
+      const diff = (prev.getTime() - cur.getTime()) / (1000 * 60 * 60 * 24);
+      if (diff === 1) count++;
+      else break;
+    }
+    return count;
+  }, [goalSavings]);
 
   async function handleRefresh() {
     setRefreshing(true);
     await refresh();
     setRefreshing(false);
+  }
+
+  function handleGoalSwitch(id: string) {
+    setActiveGoal(id);
+    setShowGoalPicker(false);
+    setSelectedPointIndex(null);
   }
 
   const s = styles(theme);
@@ -107,6 +160,7 @@ export default function HomeScreen() {
   }
 
   const { goal, totalSaved, daysRemaining, progress, remaining, suggestedAmount } = data;
+  const isCompleted = progress >= 1;
 
   return (
     <SafeAreaView style={[s.safe, { backgroundColor: theme.colors.background }]}>
@@ -115,42 +169,74 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />}
       >
-        {/* Header */}
+        {/* Header with Goal Selector */}
         <View style={s.headerRow}>
-          <View>
-            <Text style={[s.greeting, { color: theme.colors.textSecondary }]}>Olá, {goal.userName}! 👋</Text>
-            <Text style={[s.goalName, { color: theme.colors.text }]} numberOfLines={1}>{goal.name}</Text>
-          </View>
-          <View style={[s.walletIcon, { backgroundColor: Colors.primary + '20' }]}>
-            <Ionicons name="wallet" size={26} color={Colors.primary} />
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            onPress={() => goals.length > 1 && setShowGoalPicker(true)}
+            activeOpacity={goals.length > 1 ? 0.7 : 1}
+          >
+            <Text style={[s.greeting, { color: theme.colors.textSecondary }]}>Olá, {goal!.userName}! 👋</Text>
+            <View style={s.goalNameRow}>
+              <Text style={[s.goalName, { color: theme.colors.text }]} numberOfLines={1}>{goal!.name}</Text>
+              {goals.length > 1 && (
+                <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} style={{ marginLeft: 4 }} />
+              )}
+            </View>
+            {goals.length > 1 && (
+              <Text style={[s.goalCount, { color: theme.colors.textSecondary }]}>
+                {goals.length} objetivos
+              </Text>
+            )}
+          </TouchableOpacity>
+          <View style={{ alignItems: 'flex-end', gap: 4 }}>
+            <View style={[s.walletIcon, { backgroundColor: Colors.primary + '20' }]}>
+              <Ionicons name="wallet" size={26} color={Colors.primary} />
+            </View>
+            {streak > 0 && (
+              <View style={[s.streakBadge, { backgroundColor: '#FF6B35' + '20' }]}>
+                <Text style={s.streakText}>🔥 {streak}d</Text>
+              </View>
+            )}
           </View>
         </View>
+
+        {/* Goal Completion */}
+        {isCompleted && (
+          <View style={[s.card, s.completedCard]}>
+            <Text style={s.completedEmoji}>🎉</Text>
+            <Text style={s.completedTitle}>Objetivo alcançado!</Text>
+            <Text style={s.completedText}>
+              Parabéns! Você atingiu a meta de {formatCurrency(goal!.targetAmount)} para "{goal!.name}"!
+            </Text>
+          </View>
+        )}
 
         {/* Progress Card */}
         <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <Text style={[s.cardTitle, { color: theme.colors.textSecondary }]}>Progresso do objetivo</Text>
           <View style={s.amountRow}>
             <View>
-              <Text style={[s.savedAmount, { color: Colors.primary }]}>{formatCurrency(totalSaved)}</Text>
+              <Text style={[s.savedAmount, { color: Colors.primary }]}>{formatCurrency(totalSaved!)}</Text>
               <Text style={[s.targetLabel, { color: theme.colors.textSecondary }]}>
-                de {formatCurrency(goal.targetAmount)}
+                de {formatCurrency(goal!.targetAmount)}
               </Text>
             </View>
             <View style={[s.pctBadge, { backgroundColor: Colors.primary + '20' }]}>
-              <Text style={[s.pctText, { color: Colors.primary }]}>{Math.round(progress * 100)}%</Text>
+              <Text style={[s.pctText, { color: Colors.primary }]}>{Math.round(progress! * 100)}%</Text>
             </View>
           </View>
-          <ProgressBar progress={progress} showLabel={false} height={14} />
+          <ProgressBar progress={progress!} showLabel={false} height={14} />
           <View style={s.statsRow}>
             <View style={s.stat}>
               <Ionicons name="calendar-outline" size={16} color={theme.colors.textSecondary} />
               <Text style={[s.statText, { color: theme.colors.textSecondary }]}>
-                {daysRemaining > 0 ? `${daysRemaining} dias restantes` : 'Prazo encerrado'}
+                {daysRemaining! > 0 ? `${daysRemaining} dias restantes` : 'Prazo encerrado'}
               </Text>
             </View>
             <View style={s.stat}>
               <Ionicons name="flag-outline" size={16} color={theme.colors.textSecondary} />
-              <Text style={[s.statText, { color: theme.colors.textSecondary }]}>{formatDate(goal.targetDate)}</Text>
+              <Text style={[s.statText, { color: theme.colors.textSecondary }]}>{formatDate(goal!.targetDate)}</Text>
             </View>
           </View>
         </View>
@@ -160,16 +246,37 @@ export default function HomeScreen() {
           <View style={[s.halfCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <Ionicons name="trending-down-outline" size={20} color={Colors.error} />
             <Text style={[s.halfLabel, { color: theme.colors.textSecondary }]}>Falta</Text>
-            <Text style={[s.halfValue, { color: theme.colors.text }]}>{formatCurrency(remaining)}</Text>
+            <Text style={[s.halfValue, { color: theme.colors.text }]}>{formatCurrency(remaining!)}</Text>
           </View>
           <View style={[s.halfCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <Ionicons name="flash-outline" size={20} color={Colors.accent} />
             <Text style={[s.halfLabel, { color: theme.colors.textSecondary }]}>
-              {MODALITY_LABELS[goal.activeModality]}
+              {MODALITY_LABELS[goal!.activeModality]}
             </Text>
-            <Text style={[s.halfValue, { color: theme.colors.text }]}>{formatCurrency(suggestedAmount)}</Text>
+            <Text style={[s.halfValue, { color: theme.colors.text }]}>{formatCurrency(suggestedAmount!)}</Text>
           </View>
         </View>
+
+        {/* Streak Card */}
+        {streak > 0 && (
+          <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <View style={s.streakRow}>
+              <View style={[s.streakIconBox, { backgroundColor: '#FF6B35' + '15' }]}>
+                <Text style={{ fontSize: 24 }}>🔥</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[s.streakTitle, { color: theme.colors.text }]}>
+                  {streak} dia{streak > 1 ? 's' : ''} de sequência!
+                </Text>
+                <Text style={[s.streakDesc, { color: theme.colors.textSecondary }]}>
+                  {streak >= 7 ? 'Incrível! Continue assim! 💪' :
+                   streak >= 3 ? 'Ótimo ritmo! Não pare agora!' :
+                   'Bom começo! Mantenha o ritmo!'}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Monthly Summary */}
         {(monthSummary.count > 0 || monthSummary.lastTotal > 0) && (
@@ -203,12 +310,13 @@ export default function HomeScreen() {
         )}
 
         {/* Achievements */}
-        <Achievements goal={goal} savings={savings} totalSaved={totalSaved} theme={theme} />
+        <Achievements goal={goal!} savings={goalSavings} totalSaved={totalSaved!} theme={theme} />
 
-        {/* Chart */}
+        {/* Interactive Chart */}
         {chartData && chartData.datasets[0].data.length > 1 && (
           <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <Text style={[s.cardTitle, { color: theme.colors.textSecondary }]}>Evolução das economias</Text>
+            <Text style={[s.chartHint, { color: theme.colors.textSecondary }]}>Toque em um ponto para ver detalhes</Text>
             <LineChart
               data={chartData}
               width={chartWidth}
@@ -221,13 +329,44 @@ export default function HomeScreen() {
                 color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
                 labelColor: () => theme.colors.textSecondary,
                 style: { borderRadius: 16 },
-                propsForDots: { r: '4', strokeWidth: '2', stroke: Colors.primary },
+                propsForDots: { r: '5', strokeWidth: '2', stroke: Colors.primary },
               }}
               bezier
               style={{ borderRadius: 12, marginTop: 8 }}
               withInnerLines={false}
               withOuterLines={false}
+              onDataPointClick={({ index }) => {
+                setSelectedPointIndex(selectedPointIndex === index ? null : index);
+              }}
             />
+
+            {/* Chart Point Details */}
+            {selectedPointDetails && (
+              <View style={[s.pointDetail, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
+                <View style={s.pointDetailHeader}>
+                  <Ionicons name="calendar-outline" size={14} color={Colors.primary} />
+                  <Text style={[s.pointDetailDate, { color: theme.colors.text }]}>
+                    {formatDate(selectedPointDetails.date)}
+                  </Text>
+                  <Text style={[s.pointDetailTotal, { color: Colors.primary }]}>
+                    {formatCurrency(selectedPointDetails.total)}
+                  </Text>
+                </View>
+                {selectedPointDetails.entries.map((entry, i) => (
+                  <View key={entry.id} style={s.pointDetailEntry}>
+                    {entry.categoryIcon && (
+                      <CategoryIcon icon={entry.categoryIcon} size={14} color={entry.categoryColor || Colors.primary} />
+                    )}
+                    <Text style={[s.pointDetailDesc, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                      {entry.description || entry.categoryName || 'Economia'}
+                    </Text>
+                    <Text style={[s.pointDetailAmount, { color: theme.colors.text }]}>
+                      {formatCurrency(entry.amount)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
@@ -259,6 +398,52 @@ export default function HomeScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Goal Picker Modal */}
+      <Modal visible={showGoalPicker} transparent animationType="fade" onRequestClose={() => setShowGoalPicker(false)}>
+        <Pressable style={s.modalOverlay} onPress={() => setShowGoalPicker(false)}>
+          <Pressable style={[s.modalContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <Text style={[s.modalTitle, { color: theme.colors.text }]}>Seus Objetivos</Text>
+            {goals.map(g => {
+              const isActive = g.id === activeGoal?.id;
+              const gSavings = savings.filter(sv => !sv.goalId || sv.goalId === g.id);
+              const gTotal = gSavings.reduce((sum, sv) => sum + sv.amount, 0);
+              const gPct = g.targetAmount > 0 ? Math.min(1, gTotal / g.targetAmount) : 0;
+              return (
+                <TouchableOpacity
+                  key={g.id}
+                  style={[
+                    s.goalOption,
+                    {
+                      backgroundColor: isActive ? Colors.primary + '15' : theme.colors.background,
+                      borderColor: isActive ? Colors.primary : theme.colors.border,
+                    },
+                  ]}
+                  onPress={() => handleGoalSwitch(g.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={s.goalOptionTop}>
+                    <View style={[s.goalDot, { backgroundColor: isActive ? Colors.primary : theme.colors.border }]} />
+                    <Text style={[s.goalOptionName, { color: theme.colors.text }]} numberOfLines={1}>{g.name}</Text>
+                    {isActive && <Ionicons name="checkmark-circle" size={18} color={Colors.primary} />}
+                  </View>
+                  <View style={s.goalOptionBottom}>
+                    <Text style={[s.goalOptionAmount, { color: theme.colors.textSecondary }]}>
+                      {formatCurrency(gTotal)} / {formatCurrency(g.targetAmount)}
+                    </Text>
+                    <Text style={[s.goalOptionPct, { color: Colors.primary }]}>
+                      {Math.round(gPct * 100)}%
+                    </Text>
+                  </View>
+                  <View style={[s.goalProgressBg, { backgroundColor: theme.colors.border }]}>
+                    <View style={[s.goalProgressFill, { width: `${Math.round(gPct * 100)}%`, backgroundColor: Colors.primary }]} />
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -268,10 +453,20 @@ const styles = (theme: any) => StyleSheet.create({
   scroll: { padding: 20, paddingBottom: 32 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   emptyText: { fontSize: 16 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
   greeting: { fontSize: 14 },
-  goalName: { fontSize: 20, fontWeight: '800', marginTop: 2, maxWidth: 240 },
+  goalNameRow: { flexDirection: 'row', alignItems: 'center' },
+  goalName: { fontSize: 20, fontWeight: '800', marginTop: 2, maxWidth: 220 },
+  goalCount: { fontSize: 11, marginTop: 2 },
   walletIcon: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  streakBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  streakText: { fontSize: 12, fontWeight: '700', color: '#FF6B35' },
+  // Completed
+  completedCard: { backgroundColor: '#10B981' + '15', borderColor: '#10B981' + '40', alignItems: 'center', paddingVertical: 20 },
+  completedEmoji: { fontSize: 40, marginBottom: 8 },
+  completedTitle: { fontSize: 18, fontWeight: '800', color: '#10B981', marginBottom: 4 },
+  completedText: { fontSize: 13, color: '#10B981', textAlign: 'center', lineHeight: 20 },
+  // Card
   card: {
     borderRadius: 18,
     padding: 18,
@@ -308,8 +503,29 @@ const styles = (theme: any) => StyleSheet.create({
   },
   halfLabel: { fontSize: 12, marginTop: 4 },
   halfValue: { fontSize: 16, fontWeight: '700' },
+  // Streak
+  streakRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  streakIconBox: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  streakTitle: { fontSize: 16, fontWeight: '700' },
+  streakDesc: { fontSize: 13, marginTop: 2 },
+  // Chart
+  chartHint: { fontSize: 11, marginBottom: 4 },
+  pointDetail: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  pointDetailHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  pointDetailDate: { fontSize: 13, fontWeight: '600', flex: 1 },
+  pointDetailTotal: { fontSize: 14, fontWeight: '800' },
+  pointDetailEntry: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
+  pointDetailDesc: { fontSize: 12, flex: 1 },
+  pointDetailAmount: { fontSize: 13, fontWeight: '600' },
+  // Empty chart
   emptyChart: { alignItems: 'center', paddingVertical: 28, gap: 10 },
   emptyChartText: { fontSize: 13, textAlign: 'center', lineHeight: 20, maxWidth: 220 },
+  // Categories
   catRow: { marginBottom: 12 },
   catHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   catIcon: { fontSize: 16 },
@@ -324,4 +540,35 @@ const styles = (theme: any) => StyleSheet.create({
   monthValue: { fontSize: 14, fontWeight: '700' },
   monthLabel: { fontSize: 10 },
   monthCount: { fontSize: 12, textAlign: 'center' },
+  // Goal picker modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContainer: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    maxHeight: '70%',
+  },
+  modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 16, textAlign: 'center' },
+  goalOption: {
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1.5,
+    marginBottom: 10,
+  },
+  goalOptionTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  goalDot: { width: 10, height: 10, borderRadius: 5 },
+  goalOptionName: { fontSize: 15, fontWeight: '600', flex: 1 },
+  goalOptionBottom: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  goalOptionAmount: { fontSize: 12 },
+  goalOptionPct: { fontSize: 12, fontWeight: '700' },
+  goalProgressBg: { height: 4, borderRadius: 2, overflow: 'hidden' },
+  goalProgressFill: { height: 4, borderRadius: 2 },
 });

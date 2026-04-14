@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, KeyboardAvoidingView, Platform,
@@ -9,13 +9,13 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../components/Toast';
 import { CategoryIcon } from '../../components/CategoryIcon';
-import { maskCurrency, parseCurrency } from '../../utils/currency';
+import { maskCurrency, parseCurrency, formatCurrency } from '../../utils/currency';
 import { SavingEntry, Category } from '../../types';
 import { Colors } from '../../constants/colors';
 
 export default function RegisterScreen() {
   const { theme } = useTheme();
-  const { addSaving, goal, categories } = useData();
+  const { addSaving, activeGoal, goals, savings, categories } = useData();
   const { show } = useToast();
 
   const [amountText, setAmountText] = useState('');
@@ -23,6 +23,13 @@ export default function RegisterScreen() {
   const [dateText, setDateText] = useState(getTodayStr());
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Last saving for quick-add
+  const lastSaving = useMemo(() => {
+    if (!savings.length || !activeGoal) return null;
+    const goalSavings = savings.filter(s => !s.goalId || s.goalId === activeGoal.id);
+    return goalSavings[0] || null;
+  }, [savings, activeGoal]);
 
   function getTodayStr() {
     const d = new Date();
@@ -50,6 +57,15 @@ export default function RegisterScreen() {
     return d;
   }
 
+  function handleQuickAdd() {
+    if (!lastSaving) return;
+    setAmountText(maskCurrency(lastSaving.amount.toFixed(2).replace('.', ',')));
+    setDescription(lastSaving.description || '');
+    const cat = categories.find(c => c.id === lastSaving.categoryId) || null;
+    setSelectedCategory(cat);
+    show({ type: 'info', title: 'Preenchido!', message: 'Dados do último registro aplicados.' });
+  }
+
   async function handleSubmit() {
     const amount = parseCurrency(amountText);
     if (amount <= 0) {
@@ -70,6 +86,7 @@ export default function RegisterScreen() {
         description: description.trim(),
         date: dateObj.toISOString(),
         createdAt: new Date().toISOString(),
+        goalId: activeGoal?.id,
         categoryId: selectedCategory?.id,
         categoryName: selectedCategory?.name,
         categoryIcon: selectedCategory?.icon,
@@ -96,10 +113,33 @@ export default function RegisterScreen() {
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
           <View style={s.header}>
             <Text style={[s.title, { color: theme.colors.text }]}>Registrar Economia</Text>
-            {goal && (
-              <Text style={[s.goalName, { color: theme.colors.textSecondary }]}>🎯 {goal.name}</Text>
+            {activeGoal && (
+              <Text style={[s.goalName, { color: theme.colors.textSecondary }]}>🎯 {activeGoal.name}</Text>
+            )}
+            {goals.length > 1 && (
+              <Text style={[s.goalHint, { color: theme.colors.textSecondary }]}>
+                Troque de objetivo no Dashboard
+              </Text>
             )}
           </View>
+
+          {/* Quick Add */}
+          {lastSaving && (
+            <TouchableOpacity
+              style={[s.quickAdd, { backgroundColor: Colors.primary + '10', borderColor: Colors.primary + '40' }]}
+              onPress={handleQuickAdd}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="flash" size={18} color={Colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.quickAddTitle, { color: Colors.primary }]}>Repetir último registro</Text>
+                <Text style={[s.quickAddDesc, { color: theme.colors.textSecondary }]}>
+                  {formatCurrency(lastSaving.amount)} - {lastSaving.description || lastSaving.categoryName || 'Economia'}
+                </Text>
+              </View>
+              <Ionicons name="arrow-forward" size={16} color={Colors.primary} />
+            </TouchableOpacity>
+          )}
 
           <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <View style={[s.amountIconBox, { backgroundColor: Colors.primary + '15' }]}>
@@ -185,6 +225,18 @@ const styles = (theme: any) => StyleSheet.create({
   header: { marginBottom: 20 },
   title: { fontSize: 24, fontWeight: '800', marginBottom: 4 },
   goalName: { fontSize: 14 },
+  goalHint: { fontSize: 11, marginTop: 2 },
+  quickAdd: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  quickAddTitle: { fontSize: 13, fontWeight: '700' },
+  quickAddDesc: { fontSize: 12, marginTop: 2 },
   card: {
     borderRadius: 20,
     padding: 20,

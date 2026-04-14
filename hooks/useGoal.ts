@@ -1,20 +1,27 @@
+import { useMemo } from 'react';
 import { useData } from '../contexts/DataContext';
 import { getDaysRemaining, getTotalSaved, getProgress, getModalityInfos, getActiveSuggestedAmount } from '../utils/calculations';
 
 export function useGoal() {
-  const { goal, savings } = useData();
+  const { activeGoal, savings } = useData();
 
-  if (!goal) return { goal: null };
+  const goalSavings = useMemo(() => {
+    if (!activeGoal) return [];
+    return savings.filter(s => !s.goalId || s.goalId === activeGoal.id);
+  }, [savings, activeGoal]);
 
-  const totalSaved = getTotalSaved(savings);
-  const daysRemaining = getDaysRemaining(goal.targetDate);
-  const progress = getProgress(totalSaved, goal.targetAmount);
-  const remaining = Math.max(0, goal.targetAmount - totalSaved);
-  const modalities = getModalityInfos(goal, savings);
-  const suggestedAmount = getActiveSuggestedAmount(goal, savings);
+  if (!activeGoal) return { goal: null, goalSavings: [] };
+
+  const totalSaved = getTotalSaved(goalSavings);
+  const daysRemaining = getDaysRemaining(activeGoal.targetDate);
+  const progress = getProgress(totalSaved, activeGoal.targetAmount);
+  const remaining = Math.max(0, activeGoal.targetAmount - totalSaved);
+  const modalities = getModalityInfos(activeGoal, goalSavings);
+  const suggestedAmount = getActiveSuggestedAmount(activeGoal, goalSavings);
 
   return {
-    goal,
+    goal: activeGoal,
+    goalSavings,
     totalSaved,
     daysRemaining,
     progress,
