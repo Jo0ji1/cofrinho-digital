@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Dimensions,
+  View, Text, ScrollView, StyleSheet, useWindowDimensions, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LineChart } from 'react-native-chart-kit';
@@ -15,8 +15,6 @@ import { Colors } from '../../constants/colors';
 import { Achievements } from '../../components/Achievements';
 import { CategoryIcon } from '../../components/CategoryIcon';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-
 const MODALITY_LABELS: Record<string, string> = {
   daily: 'Diária',
   weekly: 'Semanal Progressivo',
@@ -26,7 +24,11 @@ const MODALITY_LABELS: Record<string, string> = {
 export default function HomeScreen() {
   const { theme, isDark } = useTheme();
   const data = useGoal();
-  const { savings, categories } = useData();
+  const { savings, categories, refresh } = useData();
+  const { width: screenWidth } = useWindowDimensions();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const chartWidth = Math.min(screenWidth, 480) - 64;
 
   const chartData = useMemo(() => {
     if (!savings.length) return null;
@@ -68,6 +70,29 @@ export default function HomeScreen() {
     return list.map(c => ({ ...c, pct: c.total / max }));
   }, [savings]);
 
+  const monthSummary = useMemo(() => {
+    const now = new Date();
+    const thisMonth = savings.filter(s => {
+      const d = new Date(s.date);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    const lastMonth = savings.filter(s => {
+      const d = new Date(s.date);
+      const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return d.getMonth() === lm.getMonth() && d.getFullYear() === lm.getFullYear();
+    });
+    const thisTotal = thisMonth.reduce((sum, e) => sum + e.amount, 0);
+    const lastTotal = lastMonth.reduce((sum, e) => sum + e.amount, 0);
+    const diff = lastTotal > 0 ? ((thisTotal - lastTotal) / lastTotal) * 100 : 0;
+    return { thisTotal, lastTotal, count: thisMonth.length, diff };
+  }, [savings]);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  }
+
   const s = styles(theme);
 
   if (!data.goal) {
@@ -85,7 +110,11 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={[s.safe, { backgroundColor: theme.colors.background }]}>
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={s.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />}
+      >
         {/* Header */}
         <View style={s.headerRow}>
           <View>
@@ -142,6 +171,37 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Monthly Summary */}
+        {(monthSummary.count > 0 || monthSummary.lastTotal > 0) && (
+          <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <Text style={[s.cardTitle, { color: theme.colors.textSecondary }]}>Resumo do mês</Text>
+            <View style={s.monthRow}>
+              <View style={s.monthItem}>
+                <Ionicons name="calendar" size={18} color={Colors.primary} />
+                <Text style={[s.monthValue, { color: theme.colors.text }]}>{formatCurrency(monthSummary.thisTotal)}</Text>
+                <Text style={[s.monthLabel, { color: theme.colors.textSecondary }]}>Este mês</Text>
+              </View>
+              <View style={[s.monthDivider, { backgroundColor: theme.colors.border }]} />
+              <View style={s.monthItem}>
+                <Ionicons name="time" size={18} color={theme.colors.textSecondary} />
+                <Text style={[s.monthValue, { color: theme.colors.text }]}>{formatCurrency(monthSummary.lastTotal)}</Text>
+                <Text style={[s.monthLabel, { color: theme.colors.textSecondary }]}>Mês anterior</Text>
+              </View>
+              <View style={[s.monthDivider, { backgroundColor: theme.colors.border }]} />
+              <View style={s.monthItem}>
+                <Ionicons name="stats-chart" size={18} color={monthSummary.diff >= 0 ? Colors.primary : Colors.error} />
+                <Text style={[s.monthValue, { color: monthSummary.diff >= 0 ? Colors.primary : Colors.error }]}>
+                  {monthSummary.diff >= 0 ? '+' : ''}{monthSummary.diff.toFixed(0)}%
+                </Text>
+                <Text style={[s.monthLabel, { color: theme.colors.textSecondary }]}>Variação</Text>
+              </View>
+            </View>
+            <Text style={[s.monthCount, { color: theme.colors.textSecondary }]}>
+              {monthSummary.count} registro{monthSummary.count !== 1 ? 's' : ''} este mês
+            </Text>
+          </View>
+        )}
+
         {/* Achievements */}
         <Achievements goal={goal} savings={savings} totalSaved={totalSaved} theme={theme} />
 
@@ -151,7 +211,7 @@ export default function HomeScreen() {
             <Text style={[s.cardTitle, { color: theme.colors.textSecondary }]}>Evolução das economias</Text>
             <LineChart
               data={chartData}
-              width={SCREEN_WIDTH - 64}
+              width={chartWidth}
               height={180}
               chartConfig={{
                 backgroundColor: 'transparent',
@@ -257,4 +317,11 @@ const styles = (theme: any) => StyleSheet.create({
   catAmount: { fontSize: 13, fontWeight: '600' },
   catBarBg: { height: 8, borderRadius: 4, overflow: 'hidden' },
   catBarFill: { height: 8, borderRadius: 4 },
+  // Monthly summary
+  monthRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  monthItem: { flex: 1, alignItems: 'center', gap: 4 },
+  monthDivider: { width: 1, height: 40 },
+  monthValue: { fontSize: 14, fontWeight: '700' },
+  monthLabel: { fontSize: 10 },
+  monthCount: { fontSize: 12, textAlign: 'center' },
 });

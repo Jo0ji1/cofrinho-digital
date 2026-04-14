@@ -4,18 +4,34 @@ import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { DataProvider, useData } from '../contexts/DataContext';
-import { ToastProvider } from '../components/Toast';
+import { ToastProvider, useToast } from '../components/Toast';
+import { shouldShowReminder } from '../utils/notifications';
 import { View, ActivityIndicator, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 function RootNavigator() {
-  const { onboardingCompleted, isLoading: dataLoading } = useData();
+  const { onboardingCompleted, isLoading: dataLoading, notifications, goal } = useData();
   const { user, isLoading: authLoading, isConfigured } = useAuth();
   const { theme, isDark } = useTheme();
+  const { show } = useToast();
   const router = useRouter();
   const segments = useSegments();
 
   const isLoading = dataLoading || authLoading;
+
+  // In-app reminder
+  useEffect(() => {
+    if (isLoading || !onboardingCompleted || !goal) return;
+    shouldShowReminder(notifications).then(shouldShow => {
+      if (shouldShow) {
+        show({
+          type: 'info',
+          title: '💰 Hora de economizar!',
+          message: `Não esqueça de registrar sua economia para "${goal.name}"!`,
+        });
+      }
+    });
+  }, [isLoading, onboardingCompleted]);
 
   useEffect(() => {
     if (isLoading) return;

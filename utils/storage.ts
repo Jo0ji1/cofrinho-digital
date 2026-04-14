@@ -48,4 +48,10 @@ export const storage = {
   async clearAll(): Promise<void> {
     await AsyncStorage.multiRemove(Object.values(KEYS));
   },
+  async getItem(key: string): Promise<string | null> {
+    return AsyncStorage.getItem(`@cofrinho:${key}`);
+  },
+  async setItem(key: string, value: string): Promise<void> {
+    await AsyncStorage.setItem(`@cofrinho:${key}`, value);
+  },
 };

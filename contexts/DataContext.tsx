@@ -13,6 +13,7 @@ interface DataContextType {
   isLoading: boolean;
   setGoal: (goal: Goal) => Promise<void>;
   addSaving: (entry: SavingEntry) => Promise<void>;
+  updateSaving: (entry: SavingEntry) => Promise<void>;
   deleteSaving: (id: string) => Promise<void>;
   setNotifications: (settings: NotificationSettings) => Promise<void>;
   completeOnboarding: () => Promise<void>;
@@ -195,6 +196,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setSavingsState(updated);
   };
 
+  const updateSaving = async (entry: SavingEntry) => {
+    if (isSupabaseConfigured() && user) {
+      await supabase.from('savings').update({
+        amount: entry.amount,
+        description: entry.description,
+        date: entry.date,
+        category_id: entry.categoryId || null,
+      }).eq('id', entry.id);
+    }
+    const updated = savings.map(s => s.id === entry.id ? entry : s);
+    await storage.setSavings(updated);
+    setSavingsState(updated);
+  };
+
   const setNotifications = async (s: NotificationSettings) => {
     await storage.setNotifications(s);
     setNotificationsState(s);
@@ -224,7 +239,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   return (
     <DataContext.Provider value={{
       goal, savings, categories, notifications, onboardingCompleted, isLoading,
-      setGoal, addSaving, deleteSaving, setNotifications,
+      setGoal, addSaving, updateSaving, deleteSaving, setNotifications,
       completeOnboarding, resetAll, refresh: loadData,
     }}>
       {children}

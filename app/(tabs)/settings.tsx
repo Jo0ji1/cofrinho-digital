@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet, Alert, TextInput, Platform,
+  View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet, TextInput, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,8 @@ import { useRouter } from 'expo-router';
 import { File as ExpoFile, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useToast } from '../../components/Toast';
+import { ConfirmModal } from '../../components/ConfirmModal';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { ModalityCard } from '../../components/ModalityCard';
@@ -21,12 +23,25 @@ export default function SettingsScreen() {
   const { theme, themeMode, setThemeMode } = useTheme();
   const { goal, setGoal, savings, notifications, setNotifications, resetAll } = useData();
   const { user, signOut, isConfigured } = useAuth();
+  const { show } = useToast();
   const router = useRouter();
 
   const [showModalities, setShowModalities] = useState(false);
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalName, setGoalName] = useState(goal?.name || '');
   const [goalAmount, setGoalAmount] = useState(goal ? formatCurrency(goal.targetAmount) : '');
+  const [confirmModal, setConfirmModal] = useState<{
+    visible: boolean; title: string; message: string;
+    confirmText: string; destructive: boolean;
+    icon?: any; onConfirm: () => void;
+  }>({ visible: false, title: '', message: '', confirmText: '', destructive: false, onConfirm: () => {} });
+
+  function showConfirm(opts: Omit<typeof confirmModal, 'visible'>) {
+    setConfirmModal({ ...opts, visible: true });
+  }
+  function hideConfirm() {
+    setConfirmModal(prev => ({ ...prev, visible: false }));
+  }
 
   const modalities = goal ? getModalityInfos(goal, []) : [];
 
@@ -34,7 +49,7 @@ export default function SettingsScreen() {
     if (value) {
       const granted = await requestNotificationPermissions();
       if (!granted) {
-        Alert.alert('Permissão negada', 'Habilite as notificações nas configurações do dispositivo.');
+        show({ type: 'warning', title: 'Permissão negada', message: 'Habilite as notificações nas configurações do dispositivo.' });
         return;
       }
     }
@@ -56,17 +71,17 @@ export default function SettingsScreen() {
   async function handleSaveGoal() {
     if (!goal) return;
     if (!goalName.trim()) {
-      Alert.alert('Atenção', 'Informe um nome para o objetivo.');
+      show({ type: 'warning', title: 'Atenção', message: 'Informe um nome para o objetivo.' });
       return;
     }
     const amount = parseCurrency(goalAmount);
     if (amount <= 0) {
-      Alert.alert('Atenção', 'Informe um valor válido.');
+      show({ type: 'warning', title: 'Atenção', message: 'Informe um valor válido.' });
       return;
     }
     await setGoal({ ...goal, name: goalName.trim(), targetAmount: amount });
     setEditingGoal(false);
-    Alert.alert('Salvo', 'Objetivo atualizado com sucesso!');
+    show({ type: 'success', title: 'Salvo', message: 'Objetivo atualizado com sucesso!' });
   }
 
   async function handleSelectModality(type: ModalityType) {
@@ -75,27 +90,24 @@ export default function SettingsScreen() {
     setShowModalities(false);
   }
 
-  async function handleLogout() {
-    Alert.alert(
-      'Sair da conta',
-      'Deseja sair da sua conta?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Sair',
-          style: 'destructive',
-          onPress: async () => {
-            await signOut();
-            router.replace('/login');
-          },
-        },
-      ],
-    );
+  function handleLogout() {
+    showConfirm({
+      title: 'Sair da conta',
+      message: 'Deseja sair da sua conta?',
+      confirmText: 'Sair',
+      destructive: true,
+      icon: 'log-out-outline',
+      onConfirm: async () => {
+        hideConfirm();
+        await signOut();
+        router.replace('/login');
+      },
+    });
   }
 
   async function handleExportCSV() {
     if (!savings.length) {
-      Alert.alert('Sem dados', 'Você ainda não tem economias registradas para exportar.');
+      show({ type: 'warning', title: 'Sem dados', message: 'Você ainda não tem economias registradas para exportar.' });
       return;
     }
     try {
@@ -127,27 +139,24 @@ export default function SettingsScreen() {
         await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', dialogTitle: 'Exportar economias' });
       }
     } catch {
-      Alert.alert('Erro', 'Não foi possível exportar os dados.');
+      show({ type: 'error', title: 'Erro', message: 'Não foi possível exportar os dados.' });
     }
   }
 
-  async function handleReset() {
-    Alert.alert(
-      'Resetar tudo',
-      'Isso vai apagar todos os seus dados. Deseja continuar?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Resetar',
-          style: 'destructive',
-          onPress: async () => {
-            await resetAll();
-            await cancelAllNotifications();
-            router.replace('/onboarding');
-          },
-        },
-      ],
-    );
+  function handleReset() {
+    showConfirm({
+      title: 'Resetar tudo',
+      message: 'Isso vai apagar todos os seus dados. Deseja continuar?',
+      confirmText: 'Resetar',
+      destructive: true,
+      icon: 'trash-outline',
+      onConfirm: async () => {
+        hideConfirm();
+        await resetAll();
+        await cancelAllNotifications();
+        router.replace('/onboarding');
+      },
+    });
   }
 
   const s = styles(theme);
@@ -350,9 +359,20 @@ export default function SettingsScreen() {
         {/* Version */}
         <View style={s.versionRow}>
           <Ionicons name="information-circle-outline" size={14} color={theme.colors.textSecondary} />
-          <Text style={[s.versionText, { color: theme.colors.textSecondary }]}>Cofrinho Digital v2.0.0</Text>
+          <Text style={[s.versionText, { color: theme.colors.textSecondary }]}>Cofrinho Digital v2.1.0</Text>
         </View>
       </ScrollView>
+
+      <ConfirmModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        destructive={confirmModal.destructive}
+        icon={confirmModal.icon}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={hideConfirm}
+      />
     </SafeAreaView>
   );
 }
