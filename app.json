@@ -27,14 +27,7 @@
       "bundler": "metro"
     },
     "plugins": [
-      "expo-router",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/notification-icon.png",
-          "color": "#10B981"
-        }
-      ]
+      "expo-router"
     ],
     "scheme": "cofrinho-digital"
   }
