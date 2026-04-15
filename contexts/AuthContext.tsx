@@ -87,9 +87,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async (): Promise<{ error?: string }> => {
     try {
       if (Platform.OS === 'web') {
+        // Monta redirectTo com origin + basePath (GitHub Pages serve em /cofrinho-digital/)
+        const redirectUrl = window.location.origin + '/cofrinho-digital';
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
-          options: { redirectTo: window.location.origin },
+          options: { redirectTo: redirectUrl },
         });
         if (error) return { error: translateError(error.message) };
         return {};
