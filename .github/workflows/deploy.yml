@@ -35,6 +35,26 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
+      - name: Enhance HTML for SEO & PWA
+        run: |
+          sed -i 's|<html lang="en">|<html lang="pt-BR">|' dist/index.html
+          sed -i 's|<title>Cofrinho Digital</title>|<title>Cofrinho Digital — Seu assistente de economia</title>|' dist/index.html
+          sed -i '/<\/title>/a \
+          <meta name="description" content="Organize suas economias, acompanhe seu progresso e alcance seus objetivos financeiros." />\
+          <meta name="theme-color" content="#10B981" />\
+          <meta name="apple-mobile-web-app-capable" content="yes" />\
+          <meta name="apple-mobile-web-app-title" content="Cofrinho Digital" />\
+          <link rel="icon" type="image/png" href="/cofrinho-digital/assets/icon.png" />\
+          <link rel="apple-touch-icon" href="/cofrinho-digital/assets/icon.png" />\
+          <meta property="og:title" content="Cofrinho Digital" />\
+          <meta property="og:description" content="Organize suas economias e alcance seus objetivos financeiros." />\
+          <meta property="og:type" content="website" />\
+          <meta property="og:url" content="https://jo0ji1.github.io/cofrinho-digital/" />\
+          <meta property="og:image" content="https://jo0ji1.github.io/cofrinho-digital/assets/icon.png" />' dist/index.html
+
+      - name: Copy assets for favicon/OG
+        run: cp -r assets dist/assets 2>/dev/null || true
+
       - name: Add 404.html for SPA routing
         run: cp dist/index.html dist/404.html
 
