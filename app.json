@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cofrinho Digital",
     "slug": "cofrinho-digital",
-    "version": "2.3.0",
+    "version": "2.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -33,7 +33,14 @@
       "expo-router",
       "expo-sharing",
       "expo-font",
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#10B981"
+        }
+      ]
     ],
     "scheme": "cofrinho-digital",
     "extra": {

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, useWindowDimensions, RefreshControl,
   TouchableOpacity, Modal, Pressable,
@@ -15,6 +15,10 @@ import { formatDate } from '../../utils/calculations';
 import { Colors } from '../../constants/colors';
 import { Achievements } from '../../components/Achievements';
 import { CategoryIcon } from '../../components/CategoryIcon';
+import { ConfettiCelebration } from '../../components/ConfettiCelebration';
+import { HeatmapCalendar } from '../../components/HeatmapCalendar';
+import { TIPS } from '../../utils/notifications';
+import { storage } from '../../utils/storage';
 
 const MODALITY_LABELS: Record<string, string> = {
   daily: 'Diária',
@@ -30,9 +34,38 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showGoalPicker, setShowGoalPicker] = useState(false);
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
 
   const chartWidth = Math.min(screenWidth, 480) - 64;
   const goalSavings = data.goalSavings || [];
+
+  // Daily tip based on day of year
+  const dailyTip = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    return TIPS[dayOfYear % TIPS.length];
+  }, []);
+
+  // Weekly challenge: save R$ (week number) this week
+  const weeklyChallenge = useMemo(() => {
+    const now = new Date();
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const weekNum = Math.ceil(((now.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24) + startOfYear.getDay()) / 7);
+    const target = weekNum;
+
+    // Calculate savings this week
+    const dayOfWeek = now.getDay();
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - mondayOffset);
+    monday.setHours(0, 0, 0, 0);
+
+    const weekSavings = goalSavings.filter(s => new Date(s.date) >= monday);
+    const weekTotal = weekSavings.reduce((sum, e) => sum + e.amount, 0);
+
+    return { weekNum, target, saved: weekTotal, pct: Math.min(1, weekTotal / target) };
+  }, [goalSavings]);
 
   // Chart data - using goal-filtered savings
   const chartData = useMemo(() => {
@@ -134,6 +167,25 @@ export default function HomeScreen() {
     return count;
   }, [goalSavings]);
 
+  // Milestone celebration detection
+  const MILESTONES = [0.25, 0.5, 0.75, 1];
+  useEffect(() => {
+    if (!data.progress || !data.goal) return;
+    const prog = data.progress;
+
+    (async () => {
+      const key = 'lastMilestone_' + data.goal.id;
+      const last = await storage.getItem(key);
+      const lastPct = last ? Number.parseFloat(last) : 0;
+      const current = MILESTONES.findLast(m => prog >= m) || 0;
+
+      if (current > lastPct && current > 0) {
+        setShowConfetti(true);
+        await storage.setItem(key, current.toString());
+      }
+    })();
+  }, [data.progress, data.goal?.id]);
+
   async function handleRefresh() {
     setRefreshing(true);
     await refresh();
@@ -161,9 +213,19 @@ export default function HomeScreen() {
 
   const { goal, totalSaved, daysRemaining, progress, remaining, suggestedAmount } = data;
   const isCompleted = progress >= 1;
+  const milestoneLabel = (() => {
+    if (progress >= 1) return '100%';
+    if (progress >= 0.75) return '75%';
+    if (progress >= 0.5) return '50%';
+    if (progress >= 0.25) return '25%';
+    return null;
+  })();
 
   return (
     <SafeAreaView style={[s.safe, { backgroundColor: theme.colors.background }]}>
+      {/* Confetti overlay */}
+      <ConfettiCelebration visible={showConfetti} onDone={() => setShowConfetti(false)} />
+
       <ScrollView
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
@@ -203,13 +265,33 @@ export default function HomeScreen() {
 
         {/* Goal Completion */}
         {isCompleted && (
-          <View style={[s.card, s.completedCard]}>
+          <TouchableOpacity
+            style={[s.card, s.completedCard]}
+            onPress={() => setShowConfetti(true)}
+            activeOpacity={0.85}
+          >
             <Text style={s.completedEmoji}>🎉</Text>
             <Text style={s.completedTitle}>Objetivo alcançado!</Text>
             <Text style={s.completedText}>
               Parabéns! Você atingiu a meta de {formatCurrency(goal!.targetAmount)} para "{goal!.name}"!
             </Text>
-          </View>
+            <Text style={[s.completedHint]}>Toque para celebrar novamente 🎊</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Milestone celebration */}
+        {!isCompleted && milestoneLabel && (
+          <TouchableOpacity
+            style={[s.card, s.milestoneCard]}
+            onPress={() => setShowConfetti(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={s.milestoneEmoji}>🏆</Text>
+            <Text style={s.milestoneTitle}>Marco de {milestoneLabel} atingido!</Text>
+            <Text style={s.milestoneText}>
+              Continue assim! Você já economizou {formatCurrency(totalSaved!)} do seu objetivo.
+            </Text>
+          </TouchableOpacity>
         )}
 
         {/* Progress Card */}
@@ -311,6 +393,52 @@ export default function HomeScreen() {
 
         {/* Achievements */}
         <Achievements goal={goal!} savings={goalSavings} totalSaved={totalSaved!} theme={theme} />
+
+        {/* Daily Tip */}
+        <View style={[s.card, s.tipCard, { borderColor: '#F59E0B' + '40' }]}>
+          <View style={s.tipHeader}>
+            <View style={[s.tipIconBox, { backgroundColor: '#F59E0B' + '15' }]}>
+              <Text style={{ fontSize: 20 }}>💡</Text>
+            </View>
+            <Text style={[s.tipTitle, { color: theme.colors.text }]}>Dica do dia</Text>
+          </View>
+          <Text style={[s.tipText, { color: theme.colors.textSecondary }]}>
+            {dailyTip.replace('💡 ', '')}
+          </Text>
+        </View>
+
+        {/* Weekly Challenge */}
+        <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View style={s.challengeHeader}>
+            <View style={[s.challengeIconBox, { backgroundColor: '#8B5CF6' + '15' }]}>
+              <Text style={{ fontSize: 20 }}>⚡</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.challengeTitle, { color: theme.colors.text }]}>Desafio Semana {weeklyChallenge.weekNum}</Text>
+              <Text style={[s.challengeDesc, { color: theme.colors.textSecondary }]}>
+                Economize {formatCurrency(weeklyChallenge.target)} esta semana
+              </Text>
+            </View>
+            {weeklyChallenge.pct >= 1 && (
+              <View style={[s.challengeDone, { backgroundColor: '#10B981' + '20' }]}>
+                <Text style={{ fontSize: 14 }}>✅</Text>
+              </View>
+            )}
+          </View>
+          <View style={[s.challengeBarBg, { backgroundColor: theme.colors.border }]}>
+            <View style={[s.challengeBarFill, { width: `${Math.round(weeklyChallenge.pct * 100)}%` }]} />
+          </View>
+          <Text style={[s.challengeProgress, { color: theme.colors.textSecondary }]}>
+            {formatCurrency(weeklyChallenge.saved)} / {formatCurrency(weeklyChallenge.target)}
+            {weeklyChallenge.pct >= 1 ? ' — Concluído! 🎉' : ` — ${Math.round(weeklyChallenge.pct * 100)}%`}
+          </Text>
+        </View>
+
+        {/* Savings Heatmap */}
+        <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <Text style={[s.cardTitle, { color: theme.colors.textSecondary }]}>Frequência de economia</Text>
+          <HeatmapCalendar savings={goalSavings} isDark={isDark} theme={theme} />
+        </View>
 
         {/* Interactive Chart */}
         {chartData && chartData.datasets[0].data.length > 1 && (
@@ -466,6 +594,27 @@ const styles = (theme: any) => StyleSheet.create({
   completedEmoji: { fontSize: 40, marginBottom: 8 },
   completedTitle: { fontSize: 18, fontWeight: '800', color: '#10B981', marginBottom: 4 },
   completedText: { fontSize: 13, color: '#10B981', textAlign: 'center', lineHeight: 20 },
+  completedHint: { fontSize: 11, color: '#10B981', marginTop: 8, opacity: 0.7 },
+  // Milestone
+  milestoneCard: { backgroundColor: '#F59E0B' + '10', borderColor: '#F59E0B' + '40', alignItems: 'center', paddingVertical: 16 },
+  milestoneEmoji: { fontSize: 32, marginBottom: 6 },
+  milestoneTitle: { fontSize: 16, fontWeight: '700', color: '#F59E0B', marginBottom: 2 },
+  milestoneText: { fontSize: 12, color: '#F59E0B', textAlign: 'center', lineHeight: 18 },
+  // Daily Tip
+  tipCard: { backgroundColor: '#F59E0B' + '08', paddingVertical: 14 },
+  tipHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  tipIconBox: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  tipTitle: { fontSize: 14, fontWeight: '700' },
+  tipText: { fontSize: 13, lineHeight: 20 },
+  // Weekly Challenge
+  challengeHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  challengeIconBox: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  challengeTitle: { fontSize: 14, fontWeight: '700' },
+  challengeDesc: { fontSize: 12, marginTop: 1 },
+  challengeDone: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  challengeBarBg: { height: 8, borderRadius: 4, overflow: 'hidden' },
+  challengeBarFill: { height: 8, borderRadius: 4, backgroundColor: '#8B5CF6' },
+  challengeProgress: { fontSize: 12, marginTop: 6 },
   // Card
   card: {
     borderRadius: 18,
