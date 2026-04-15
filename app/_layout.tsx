@@ -8,6 +8,7 @@ import { ToastProvider, useToast } from '../components/Toast';
 import { shouldShowReminder } from '../utils/notifications';
 import { View, ActivityIndicator, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 function RootNavigator() {
   const { onboardingCompleted, isLoading: dataLoading, notifications, goal } = useData();
@@ -104,17 +105,19 @@ function WebWrapper({ children }: { children: React.ReactNode }) {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider>
-        <WebWrapper>
-          <AuthProvider>
-            <DataProvider>
-              <ToastProvider>
-                <RootNavigator />
-              </ToastProvider>
-            </DataProvider>
-          </AuthProvider>
-        </WebWrapper>
-      </ThemeProvider>
+      <ErrorBoundary>
+        <ThemeProvider>
+          <WebWrapper>
+            <AuthProvider>
+              <DataProvider>
+                <ToastProvider>
+                  <RootNavigator />
+                </ToastProvider>
+              </DataProvider>
+            </AuthProvider>
+          </WebWrapper>
+        </ThemeProvider>
+      </ErrorBoundary>
     </GestureHandlerRootView>
   );
 }

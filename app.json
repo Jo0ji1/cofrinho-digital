@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cofrinho Digital",
     "slug": "cofrinho-digital",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -28,9 +28,6 @@
     "web": {
       "bundler": "metro",
       "output": "single"
-    },
-    "experiments": {
-      "baseUrl": "/cofrinho-digital"
     },
     "plugins": [
       "expo-router",

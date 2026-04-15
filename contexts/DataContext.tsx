@@ -30,14 +30,14 @@ interface DataContextType {
 const DataContext = createContext<DataContextType>({} as DataContextType);
 
 const DEFAULT_CATEGORIES: Category[] = [
-  { id: 'cat-1', name: 'Alimentação', icon: '🍔', color: '#FF6B6B', isDefault: true },
-  { id: 'cat-2', name: 'Transporte', icon: '🚗', color: '#4ECDC4', isDefault: true },
-  { id: 'cat-3', name: 'Lazer', icon: '🎮', color: '#45B7D1', isDefault: true },
-  { id: 'cat-4', name: 'Compras', icon: '🛍️', color: '#96CEB4', isDefault: true },
-  { id: 'cat-5', name: 'Saúde', icon: '💊', color: '#FFEAA7', isDefault: true },
-  { id: 'cat-6', name: 'Educação', icon: '📚', color: '#DDA0DD', isDefault: true },
-  { id: 'cat-7', name: 'Moradia', icon: '🏠', color: '#98D8C8', isDefault: true },
-  { id: 'cat-8', name: 'Outro', icon: '📌', color: '#B0B0B0', isDefault: true },
+  { id: 'cat-1', name: 'Alimentação', icon: '🍔', color: '#EF4444', isDefault: true },
+  { id: 'cat-2', name: 'Transporte', icon: '🚗', color: '#3B82F6', isDefault: true },
+  { id: 'cat-3', name: 'Lazer', icon: '🎮', color: '#8B5CF6', isDefault: true },
+  { id: 'cat-4', name: 'Compras', icon: '🛍️', color: '#F59E0B', isDefault: true },
+  { id: 'cat-5', name: 'Saúde', icon: '💊', color: '#EC4899', isDefault: true },
+  { id: 'cat-6', name: 'Educação', icon: '📚', color: '#06B6D4', isDefault: true },
+  { id: 'cat-7', name: 'Moradia', icon: '🏠', color: '#14B8A6', isDefault: true },
+  { id: 'cat-8', name: 'Outro', icon: '📌', color: '#6B7280', isDefault: true },
 ];
 
 export function DataProvider({ children }: { children: ReactNode }) {

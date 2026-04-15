@@ -70,6 +70,7 @@ export default function LoginScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
+              accessibilityLabel="Campo de email"
             />
 
             <Text style={[s.label, { color: theme.colors.textSecondary }]}>Senha</Text>
@@ -82,6 +83,7 @@ export default function LoginScreen() {
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
                 autoComplete="password"
+                accessibilityLabel="Campo de senha"
               />
               <TouchableOpacity style={s.eyeBtn} onPress={() => setShowPassword(!showPassword)}>
                 <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={theme.colors.textSecondary} />

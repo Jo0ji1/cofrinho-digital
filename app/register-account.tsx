@@ -89,6 +89,7 @@ export default function RegisterAccountScreen() {
               value={name}
               onChangeText={setName}
               maxLength={40}
+              accessibilityLabel="Campo de nome"
             />
 
             <Text style={[s.label, { color: theme.colors.textSecondary }]}>Email</Text>
@@ -101,6 +102,7 @@ export default function RegisterAccountScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
+              accessibilityLabel="Campo de email"
             />
 
             <Text style={[s.label, { color: theme.colors.textSecondary }]}>Senha</Text>
