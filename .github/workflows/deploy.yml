@@ -38,15 +38,15 @@ jobs:
       - name: Enhance HTML for SEO & PWA
         run: |
           sed -i 's|<html lang="en">|<html lang="pt-BR">|' dist/index.html
-          sed -i 's|<title>Cofrinho Digital</title>|<title>Cofrinho Digital — Seu assistente de economia</title>|' dist/index.html
+          sed -i 's|<title>Poupi</title>|<title>Poupi — Seu assistente de economia</title>|' dist/index.html
           sed -i '/<\/title>/a \
           <meta name="description" content="Organize suas economias, acompanhe seu progresso e alcance seus objetivos financeiros." />\
           <meta name="theme-color" content="#10B981" />\
           <meta name="apple-mobile-web-app-capable" content="yes" />\
-          <meta name="apple-mobile-web-app-title" content="Cofrinho Digital" />\
+          <meta name="apple-mobile-web-app-title" content="Poupi" />\
           <link rel="icon" type="image/png" href="/cofrinho-digital/assets/icon.png" />\
           <link rel="apple-touch-icon" href="/cofrinho-digital/assets/icon.png" />\
-          <meta property="og:title" content="Cofrinho Digital" />\
+          <meta property="og:title" content="Poupi" />\
           <meta property="og:description" content="Organize suas economias e alcance seus objetivos financeiros." />\
           <meta property="og:type" content="website" />\
           <meta property="og:url" content="https://jo0ji1.github.io/cofrinho-digital/" />\

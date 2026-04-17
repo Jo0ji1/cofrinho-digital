@@ -6,8 +6,8 @@ const WEEKS = 13;
 const DAYS = 7;
 const CELL_SIZE = 14;
 const GAP = 3;
-const INTENSITY_DARK = ['#1B1B1F', '#064E3B', '#059669', '#10B981', '#34D399'];
-const INTENSITY_LIGHT = ['#E5E7EB', '#D1FAE5', '#6EE7B7', '#34D399', '#059669'];
+const INTENSITY_DARK = ['#2A2A2E', '#064E3B', '#059669', '#10B981', '#34D399'];
+const INTENSITY_LIGHT = ['#F3F4F6', '#D1FAE5', '#6EE7B7', '#34D399', '#059669'];
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 interface Props {

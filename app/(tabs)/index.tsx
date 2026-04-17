@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LineChart } from 'react-native-chart-kit';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useGoal } from '../../hooks/useGoal';
 import { useData } from '../../contexts/DataContext';
@@ -31,6 +32,7 @@ export default function HomeScreen() {
   const data = useGoal();
   const { goals, activeGoal, setActiveGoal, savings, categories, refresh } = useData();
   const { width: screenWidth } = useWindowDimensions();
+  const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [showGoalPicker, setShowGoalPicker] = useState(false);
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
@@ -47,12 +49,24 @@ export default function HomeScreen() {
     return TIPS[dayOfYear % TIPS.length];
   }, []);
 
-  // Weekly challenge: save R$ (week number) this week
+  // Weekly challenge: proportional to goal - save suggested weekly amount
   const weeklyChallenge = useMemo(() => {
     const now = new Date();
     const startOfYear = new Date(now.getFullYear(), 0, 1);
     const weekNum = Math.ceil(((now.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24) + startOfYear.getDay()) / 7);
-    const target = weekNum;
+
+    // Target = suggested daily * 7 (proportional to goal) or weekly modality amount
+    const dailySuggested = data.suggestedAmount || 0;
+    const modality = data.goal?.activeModality || 'daily';
+    let target: number;
+    if (modality === 'weekly') {
+      target = dailySuggested; // already weekly amount
+    } else if (modality === 'monthly') {
+      target = dailySuggested / 4; // monthly / 4 weeks
+    } else {
+      target = dailySuggested * 7; // daily * 7
+    }
+    target = Math.max(target, 1); // minimum R$ 1
 
     // Calculate savings this week
     const dayOfWeek = now.getDay();
@@ -65,19 +79,25 @@ export default function HomeScreen() {
     const weekTotal = weekSavings.reduce((sum, e) => sum + e.amount, 0);
 
     return { weekNum, target, saved: weekTotal, pct: Math.min(1, weekTotal / target) };
-  }, [goalSavings]);
+  }, [goalSavings, data.suggestedAmount, data.goal?.activeModality]);
 
-  // Chart data - using goal-filtered savings
+  // Chart data - group by unique dates to avoid duplicate labels
   const chartData = useMemo(() => {
     if (!goalSavings.length) return null;
     const sorted = [...goalSavings].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    const last7 = sorted.slice(-7);
+    // Group by date to avoid duplicate labels
+    const dayMap: Record<string, number> = {};
+    sorted.forEach(e => {
+      const key = e.date.split('T')[0];
+      dayMap[key] = (dayMap[key] || 0) + e.amount;
+    });
+    const days = Object.entries(dayMap).sort(([a], [b]) => a.localeCompare(b)).slice(-7);
     let cum = 0;
     const labels: string[] = [];
     const values: number[] = [];
-    last7.forEach(e => {
-      cum += e.amount;
-      const d = new Date(e.date);
+    days.forEach(([dateKey, amount]) => {
+      cum += amount;
+      const d = new Date(dateKey + 'T12:00:00');
       labels.push(`${d.getDate()}/${d.getMonth() + 1}`);
       values.push(parseFloat(cum.toFixed(2)));
     });
@@ -85,24 +105,19 @@ export default function HomeScreen() {
       labels.unshift('');
       values.unshift(0);
     }
-    return { labels, datasets: [{ data: values }], savings: last7 };
+    return { labels, datasets: [{ data: values }], days };
   }, [goalSavings]);
 
   // Selected point details for interactive chart
   const selectedPointDetails = useMemo(() => {
     if (selectedPointIndex === null || !chartData) return null;
-    const sorted = [...goalSavings].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    const last7 = sorted.slice(-7);
-    // If we padded with a dummy point, adjust index
     const offset = chartData.labels[0] === '' ? -1 : 0;
     const realIndex = selectedPointIndex + offset;
-    if (realIndex < 0 || realIndex >= last7.length) return null;
-    const entry = last7[realIndex];
-    // Find all entries on the same date
-    const dateKey = entry.date.split('T')[0];
+    if (realIndex < 0 || realIndex >= chartData.days.length) return null;
+    const [dateKey] = chartData.days[realIndex];
     const dayEntries = goalSavings.filter(s => s.date.split('T')[0] === dateKey);
     const dayTotal = dayEntries.reduce((sum, e) => sum + e.amount, 0);
-    return { date: entry.date, entries: dayEntries, total: dayTotal };
+    return { date: dateKey + 'T12:00:00', entries: dayEntries, total: dayTotal };
   }, [selectedPointIndex, chartData, goalSavings]);
 
   // Category stats - filtered by goal
@@ -252,8 +267,17 @@ export default function HomeScreen() {
             )}
           </TouchableOpacity>
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
-            <View style={[s.walletIcon, { backgroundColor: Colors.primary + '20' }]}>
-              <Ionicons name="wallet" size={26} color={Colors.primary} />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                style={[s.walletIcon, { backgroundColor: '#8B5CF6' + '20' }]}
+                onPress={() => router.push('/shared-goal')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="people" size={22} color="#8B5CF6" />
+              </TouchableOpacity>
+              <View style={[s.walletIcon, { backgroundColor: Colors.primary + '20' }]}>
+                <Ionicons name="wallet" size={26} color={Colors.primary} />
+              </View>
             </View>
             {streak > 0 && (
               <View style={[s.streakBadge, { backgroundColor: '#FF6B35' + '20' }]}>
@@ -395,9 +419,9 @@ export default function HomeScreen() {
         <Achievements goal={goal!} savings={goalSavings} totalSaved={totalSaved!} theme={theme} />
 
         {/* Daily Tip */}
-        <View style={[s.card, s.tipCard, { borderColor: '#F59E0B' + '40' }]}>
+        <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View style={s.tipHeader}>
-            <View style={[s.tipIconBox, { backgroundColor: '#F59E0B' + '15' }]}>
+            <View style={[s.tipIconBox, { backgroundColor: '#F59E0B' + '20' }]}>
               <Text style={{ fontSize: 20 }}>💡</Text>
             </View>
             <Text style={[s.tipTitle, { color: theme.colors.text }]}>Dica do dia</Text>
@@ -510,7 +534,7 @@ export default function HomeScreen() {
         {/* Category Breakdown */}
         {categoryStats.length > 0 && (
           <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <Text style={[s.cardTitle, { color: theme.colors.textSecondary }]}>Economias por categoria</Text>
+            <Text style={[s.cardTitle, { color: theme.colors.textSecondary }]}>Economias por origem</Text>
             {categoryStats.map((cat, i) => (
               <View key={cat.name} style={s.catRow}>
                 <View style={s.catHeader}>
@@ -601,7 +625,7 @@ const styles = (theme: any) => StyleSheet.create({
   milestoneTitle: { fontSize: 16, fontWeight: '700', color: '#F59E0B', marginBottom: 2 },
   milestoneText: { fontSize: 12, color: '#F59E0B', textAlign: 'center', lineHeight: 18 },
   // Daily Tip
-  tipCard: { backgroundColor: '#F59E0B' + '08', paddingVertical: 14 },
+  tipCard: { paddingVertical: 14 },
   tipHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   tipIconBox: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   tipTitle: { fontSize: 14, fontWeight: '700' },

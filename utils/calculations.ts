@@ -28,7 +28,12 @@ export function getModalityInfos(goal: Goal, savings: SavingEntry[]): ModalityIn
   const dailyAmount = daysRemaining > 0 ? remaining / daysRemaining : remaining;
   // Progressive series: week 1 pays 1x, week 2 pays 2x, … week N pays Nx.
   // Total = start * N*(N+1)/2 = remaining → start = remaining / (N*(N+1)/2)
-  const actualWeeklyStart = remaining / (weeksRemaining * ((weeksRemaining + 1) / 2));
+  const weeklyBase = remaining / (weeksRemaining * ((weeksRemaining + 1) / 2));
+  // Calculate current week number relative to total weeks
+  const totalDays = Math.max(1, Math.ceil((new Date(goal.targetDate).getTime() - new Date(goal.createdAt).getTime()) / (1000 * 60 * 60 * 24)));
+  const elapsedDays = totalDays - daysRemaining;
+  const currentWeek = Math.max(1, Math.min(weeksRemaining, Math.ceil(elapsedDays / 7) + 1));
+  const currentWeeklyAmount = weeklyBase * currentWeek;
   const monthlyAmount = remaining / monthsRemaining;
 
   return [
@@ -43,10 +48,10 @@ export function getModalityInfos(goal: Goal, savings: SavingEntry[]): ModalityIn
     {
       type: 'weekly',
       title: 'Desafio Semanal Progressivo',
-      description: 'Começa menor e aumenta a cada semana',
+      description: `Semana ${currentWeek} de ${weeksRemaining} — cresce a cada semana`,
       icon: 'trending-up-outline',
-      suggestedAmount: actualWeeklyStart,
-      period: 'na 1ª semana',
+      suggestedAmount: currentWeeklyAmount,
+      period: `semana ${currentWeek}`,
     },
     {
       type: 'monthly',

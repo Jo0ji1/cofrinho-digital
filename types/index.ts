@@ -53,3 +53,26 @@ export interface AppData {
   notifications: NotificationSettings;
   onboardingCompleted: boolean;
 }
+
+// Shared Goals
+export type GoalRole = 'owner' | 'editor' | 'participant';
+
+export interface GoalMember {
+  id: string;
+  goalId: string;
+  userId: string;
+  userName?: string;
+  role: GoalRole;
+  joinedAt: string;
+}
+
+export interface GoalInvite {
+  id: string;
+  goalId: string;
+  inviteCode: string;
+  createdBy: string;
+  maxUses: number;
+  usedCount: number;
+  expiresAt: string;
+  createdAt: string;
+}

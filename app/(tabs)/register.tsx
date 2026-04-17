@@ -156,7 +156,7 @@ export default function RegisterScreen() {
               keyboardType="numeric"
             />
 
-            <Text style={[s.label, { color: theme.colors.textSecondary }]}>Categoria</Text>
+            <Text style={[s.label, { color: theme.colors.textSecondary }]}>Origem da economia</Text>
             <View style={s.categoryGrid}>
               {categories.map(cat => {
                 const isSelected = selectedCategory?.id === cat.id;
@@ -185,7 +185,7 @@ export default function RegisterScreen() {
             <Text style={[s.label, { color: theme.colors.textSecondary }]}>Descrição (opcional)</Text>
             <TextInput
               style={[s.input, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
-              placeholder="Ex: Economizei no almoço"
+              placeholder="Ex: Sobrou do lanche, recebi pix, etc."
               placeholderTextColor={theme.colors.textSecondary}
               value={description}
               onChangeText={setDescription}

@@ -75,6 +75,7 @@ function RootNavigator() {
         <Stack.Screen name="forgot-password" />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="modalities" />
+        <Stack.Screen name="shared-goal" />
         <Stack.Screen name="(tabs)" />
       </Stack>
       <StatusBar style={isDark ? 'light' : 'dark'} />
