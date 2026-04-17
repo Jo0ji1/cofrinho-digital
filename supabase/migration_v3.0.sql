@@ -1,6 +1,8 @@
 -- ============================================
--- Cofrinho Digital v3.0 - Shared Goals Migration
+-- Poupi v3.0 - Shared Goals Migration
 -- Execute este SQL no SQL Editor do Supabase
+-- IMPORTANTE: Após rodar este arquivo, execute também
+-- migration_v3.0_fix.sql para corrigir as policies RLS!
 -- ============================================
 
 -- Coluna goal_id na tabela savings (se não existir)
