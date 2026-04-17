@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  Alert, Share, ActivityIndicator, RefreshControl,
+  Share, ActivityIndicator, RefreshControl, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
 import { GoalMember, GoalInvite } from '../types';
+import { showAlert } from '../utils/alert';
 
 export default function SharedGoalScreen() {
   const { theme } = useTheme();
@@ -53,40 +54,54 @@ export default function SharedGoalScreen() {
       setInviteCode(invite.inviteCode);
       await loadData();
     } else {
-      Alert.alert('Erro', 'Não foi possível criar o convite. Verifique sua conexão.');
+      showAlert('Erro', 'Não foi possível criar o convite. Verifique sua conexão.');
     }
   };
 
   const handleShareInvite = async (code: string) => {
+    const message = `🐷 Entre no meu Poupi compartilhado!\n\nCódigo de convite: ${code}\n\nBaixe o Poupi e use este código para economizar junto comigo!`;
     try {
-      await Share.share({
-        message: `🐷 Entre no meu Poupi compartilhado!\n\nCódigo de convite: ${code}\n\nBaixe o Poupi e use este código para economizar junto comigo!`,
-      });
+      if (Platform.OS === 'web') {
+        // Tentar Web Share API
+        if (typeof navigator !== 'undefined' && (navigator as any).share) {
+          await (navigator as any).share({ title: 'Poupi', text: message });
+          return;
+        }
+        // Fallback: copiar para clipboard
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+          await navigator.clipboard.writeText(code);
+          showAlert('Código copiado!', `O código ${code} foi copiado para sua área de transferência.`);
+          return;
+        }
+        showAlert('Código de convite', code);
+        return;
+      }
+      await Share.share({ message });
     } catch {}
   };
 
   const handleJoinGoal = async () => {
     const code = joinCode.trim();
     if (!code) {
-      Alert.alert('Atenção', 'Digite o código de convite');
+      showAlert('Atenção', 'Digite o código de convite');
       return;
     }
     setLoading(true);
     const result = await joinGoalByInvite(code);
     setLoading(false);
     if (result.success) {
-      Alert.alert('Sucesso! 🎉', `Você entrou no objetivo "${result.goalName}"!`, [
+      showAlert('Sucesso! 🎉', `Você entrou no objetivo "${result.goalName}"!`, [
         { text: 'OK', onPress: () => router.back() },
       ]);
       setJoinCode('');
     } else {
-      Alert.alert('Erro', result.error || 'Não foi possível entrar no objetivo');
+      showAlert('Erro', result.error || 'Não foi possível entrar no objetivo');
     }
   };
 
   const handleRemoveMember = (member: GoalMember) => {
     if (member.userId === user?.id) {
-      Alert.alert('Sair do objetivo', 'Deseja sair deste objetivo compartilhado?', [
+      showAlert('Sair do objetivo', 'Deseja sair deste objetivo compartilhado?', [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Sair', style: 'destructive', onPress: async () => {
@@ -96,7 +111,7 @@ export default function SharedGoalScreen() {
         },
       ]);
     } else {
-      Alert.alert('Remover membro', `Remover ${member.userName} do objetivo?`, [
+      showAlert('Remover membro', `Remover ${member.userName} do objetivo?`, [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Remover', style: 'destructive', onPress: async () => {

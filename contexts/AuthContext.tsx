@@ -61,10 +61,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (email: string, password: string, name: string): Promise<{ error?: string }> => {
     if (!EMAIL_RE.test(email)) return { error: 'Formato de email inválido.' };
     if (password.length < 6) return { error: 'A senha deve ter pelo menos 6 caracteres.' };
+
+    // Redirect URL para confirmação de email (web usa origin + basePath)
+    let emailRedirectTo: string | undefined;
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      emailRedirectTo = window.location.origin + '/cofrinho-digital/';
+    }
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name } },
+      options: {
+        data: { name },
+        ...(emailRedirectTo ? { emailRedirectTo } : {}),
+      },
     });
     if (error) return { error: translateError(error.message) };
     return {};
