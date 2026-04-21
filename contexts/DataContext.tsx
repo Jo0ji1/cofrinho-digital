@@ -28,6 +28,7 @@ interface DataContextType {
   // Shared goals
   getGoalMembers: (goalId: string) => Promise<GoalMember[]>;
   createGoalInvite: (goalId: string, expiresInDays?: number) => Promise<GoalInvite | null>;
+  regenerateInvite: (goalId: string, expiresInDays?: number) => Promise<GoalInvite | null>;
   joinGoalByInvite: (inviteCode: string) => Promise<{ success: boolean; goalName?: string; error?: string }>;
   removeGoalMember: (goalId: string, userId: string) => Promise<void>;
   updateMemberRole: (goalId: string, userId: string, role: 'editor' | 'participant' | 'viewer') => Promise<boolean>;
@@ -239,6 +240,37 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [user, loadFromSupabase]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Realtime: reload data when savings/members/goals/activities change
+  // on any goal the user is part of
+  useEffect(() => {
+    if (!user || !isSupabaseConfigured()) return;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const trigger = () => {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        loadFromSupabase().then((data) => {
+          if (!data) return;
+          setGoalsState(data.goals);
+          setSavingsState(data.savings);
+          setCategoriesState(data.categories);
+          setMyRoleByGoal(data.rolesMap || {});
+          setMemberCountByGoal(data.countsMap || {});
+        });
+      }, 500);
+    };
+    const ch = supabase
+      .channel('vaqui-sync-' + user.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'savings' }, trigger)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'goal_members' }, trigger)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'goals' }, trigger)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'goal_activities' }, trigger)
+      .subscribe();
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      supabase.removeChannel(ch);
+    };
+  }, [user, loadFromSupabase]);
 
   // setGoal: upsert - if exists update, else add + set active
   const setGoal = async (g: Goal) => {
@@ -560,6 +592,38 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const regenerateInvite = async (goalId: string, expiresInDays = 7): Promise<GoalInvite | null> => {
+    if (!isSupabaseConfigured() || !user) return null;
+    try {
+      const { data, error } = await supabase.rpc('regenerate_goal_invite', {
+        p_goal_id: goalId,
+        p_expires_in_days: expiresInDays,
+      });
+      if (error) throw error;
+      const result = data as any;
+      if (!result?.success) return null;
+      // Re-fetch the new invite row
+      const { data: inv } = await supabase
+        .from('goal_invites')
+        .select('*')
+        .eq('id', result.invite_id)
+        .single();
+      if (!inv) return null;
+      return {
+        id: inv.id,
+        goalId: inv.goal_id,
+        inviteCode: inv.invite_code,
+        createdBy: inv.created_by,
+        maxUses: inv.max_uses,
+        usedCount: inv.used_count,
+        expiresAt: inv.expires_at,
+        createdAt: inv.created_at,
+      };
+    } catch {
+      return null;
+    }
+  };
+
   const joinGoalByInvite = async (inviteCode: string): Promise<{ success: boolean; goalName?: string; error?: string }> => {
     if (!isSupabaseConfigured() || !user) return { success: false, error: 'Não autenticado' };
     try {
@@ -627,7 +691,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setGoal, addGoal, updateGoal, deleteGoal, setActiveGoal: setActiveGoalFn,
       addSaving, updateSaving, deleteSaving, setNotifications,
       completeOnboarding, resetAll, refresh: loadData,
-      getGoalMembers, createGoalInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites,
+      getGoalMembers, createGoalInvite, regenerateInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites,
       getGoalActivities, logActivity,
       myRoleByGoal, memberCountByGoal,
     }}>

@@ -546,7 +546,7 @@ export default function SettingsScreen() {
         {/* Version */}
         <View style={s.versionRow}>
           <Ionicons name="information-circle-outline" size={14} color={theme.colors.textSecondary} />
-          <Text style={[s.versionText, { color: theme.colors.textSecondary }]}>Poupi v3.0.0</Text>
+          <Text style={[s.versionText, { color: theme.colors.textSecondary }]}>Vaqui v3.1.0</Text>
         </View>
       </ScrollView>
 

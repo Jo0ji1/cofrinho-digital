@@ -55,7 +55,7 @@ export default function LoginScreen() {
             <View style={s.iconWrap}>
               <Ionicons name="wallet" size={48} color="#fff" />
             </View>
-            <Text style={s.title}>Poupi</Text>
+            <Text style={s.title}>Vaqui</Text>
             <Text style={[s.subtitle, { color: theme.colors.textSecondary }]}>Entre na sua conta para continuar</Text>
           </View>
 

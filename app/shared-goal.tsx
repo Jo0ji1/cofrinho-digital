@@ -15,7 +15,7 @@ import { showAlert } from '../utils/alert';
 
 export default function SharedGoalScreen() {
   const { theme } = useTheme();
-  const { activeGoal, savings, getGoalMembers, createGoalInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites, getGoalActivities, refresh } = useData();
+  const { activeGoal, savings, getGoalMembers, createGoalInvite, regenerateInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites, getGoalActivities, refresh } = useData();
   const { user } = useAuth();
   const router = useRouter();
 
@@ -61,13 +61,37 @@ export default function SharedGoalScreen() {
     }
   };
 
+  const handleRegenerateInvite = async () => {
+    if (!activeGoal) return;
+    showAlert(
+      'Gerar novo código',
+      'Isso vai invalidar o código atual e criar um novo. Continuar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Gerar novo', onPress: async () => {
+            setLoading(true);
+            const invite = await regenerateInvite(activeGoal.id);
+            setLoading(false);
+            if (invite) {
+              setInviteCode(invite.inviteCode);
+              await loadData();
+            } else {
+              showAlert('Erro', 'Não foi possível gerar novo código.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleShareInvite = async (code: string) => {
-    const message = `🐷 Entre no meu Poupi compartilhado!\n\nCódigo de convite: ${code}\n\nBaixe o Poupi e use este código para economizar junto comigo!`;
+    const message = `� Entre na minha Vaqui compartilhada!\n\nCódigo de convite: ${code}\n\nBaixe o Vaqui e use este código para economizar junto comigo!`;
     try {
       if (Platform.OS === 'web') {
         // Tentar Web Share API
         if (typeof navigator !== 'undefined' && (navigator as any).share) {
-          await (navigator as any).share({ title: 'Poupi', text: message });
+          await (navigator as any).share({ title: 'Vaqui', text: message });
           return;
         }
         // Fallback: copiar para clipboard
@@ -210,7 +234,7 @@ export default function SharedGoalScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: theme.colors.text }]}>Poupi Compartilhado</Text>
+        <Text style={[s.headerTitle, { color: theme.colors.text }]}>Vaqui Compartilhada</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -466,13 +490,23 @@ export default function SharedGoalScreen() {
                   <View style={[s.codeDisplay, { backgroundColor: theme.colors.background, borderColor: Colors.primary }]}>
                     <Text style={[s.codeText, { color: Colors.primary }]}>{inviteCode}</Text>
                   </View>
-                  <TouchableOpacity
-                    style={[s.shareBtn, { backgroundColor: Colors.primary }]}
-                    onPress={() => handleShareInvite(inviteCode)}
-                  >
-                    <Ionicons name="share-outline" size={18} color="#FFF" />
-                    <Text style={s.shareBtnText}>Compartilhar</Text>
-                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', gap: 8, width: '100%' }}>
+                    <TouchableOpacity
+                      style={[s.shareBtn, { backgroundColor: Colors.primary, flex: 1 }]}
+                      onPress={() => handleShareInvite(inviteCode)}
+                    >
+                      <Ionicons name="share-outline" size={18} color="#FFF" />
+                      <Text style={s.shareBtnText}>Compartilhar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.shareBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: Colors.primary, flex: 1 }]}
+                      onPress={handleRegenerateInvite}
+                      disabled={loading}
+                    >
+                      <Ionicons name="refresh" size={18} color={Colors.primary} />
+                      <Text style={[s.shareBtnText, { color: Colors.primary }]}>Novo código</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ) : (
                 <TouchableOpacity
@@ -526,7 +560,7 @@ export default function SharedGoalScreen() {
               <View style={[s.joinIcon, { backgroundColor: Colors.primary + '15' }]}>
                 <Text style={{ fontSize: 32 }}>🤝</Text>
               </View>
-              <Text style={[s.joinTitle, { color: theme.colors.text }]}>Entrar em um Poupi</Text>
+              <Text style={[s.joinTitle, { color: theme.colors.text }]}>Entrar numa Vaqui</Text>
               <Text style={[s.joinDesc, { color: theme.colors.textSecondary }]}>
                 Peça o código de convite para o dono do objetivo e cole abaixo
               </Text>
