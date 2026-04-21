@@ -15,7 +15,7 @@ import { Colors } from '../../constants/colors';
 
 export default function RegisterScreen() {
   const { theme } = useTheme();
-  const { addSaving, activeGoal, goals, savings, categories } = useData();
+  const { addSaving, activeGoal, goals, savings, categories, myRoleByGoal } = useData();
   const { show } = useToast();
 
   const [amountText, setAmountText] = useState('');
@@ -67,6 +67,15 @@ export default function RegisterScreen() {
   }
 
   async function handleSubmit() {
+    // Security check: viewer cannot add savings
+    if (activeGoal && myRoleByGoal[activeGoal.id] === 'viewer') {
+      show({
+        type: 'warning',
+        title: 'Aguardando aprovação',
+        message: 'Você entrou como visualizador. Peça ao dono do objetivo para aprovar seu acesso antes de registrar economias.',
+      });
+      return;
+    }
     const amount = parseCurrency(amountText);
     if (amount <= 0) {
       show({ type: 'warning', title: 'Atenção', message: 'Informe um valor válido para o registro.' });
@@ -77,13 +86,30 @@ export default function RegisterScreen() {
       show({ type: 'warning', title: 'Atenção', message: 'Informe uma data válida no formato DD/MM/AAAA.' });
       return;
     }
+    // Sanity check on amount
+    if (amount > 10_000_000) {
+      show({ type: 'warning', title: 'Atenção', message: 'Valor muito alto. Verifique o número informado.' });
+      return;
+    }
+    // Sanity check on date (not in the future, not older than 10 years)
+    const now = new Date();
+    const tenYearsAgo = new Date();
+    tenYearsAgo.setFullYear(now.getFullYear() - 10);
+    if (dateObj > now) {
+      show({ type: 'warning', title: 'Atenção', message: 'A data não pode ser no futuro.' });
+      return;
+    }
+    if (dateObj < tenYearsAgo) {
+      show({ type: 'warning', title: 'Atenção', message: 'Data muito antiga.' });
+      return;
+    }
 
     setSubmitting(true);
     try {
       const entry: SavingEntry = {
         id: Date.now().toString(),
         amount,
-        description: description.trim(),
+        description: description.trim().slice(0, 200),
         date: dateObj.toISOString(),
         createdAt: new Date().toISOString(),
         goalId: activeGoal?.id,
@@ -98,8 +124,8 @@ export default function RegisterScreen() {
       setDateText(getTodayStr());
       setSelectedCategory(null);
       show({ type: 'success', title: 'Sucesso', message: 'Economia registrada com sucesso!' });
-    } catch {
-      show({ type: 'error', title: 'Erro', message: 'Não foi possível registrar a economia.' });
+    } catch (err: any) {
+      show({ type: 'error', title: 'Erro', message: err?.message || 'Não foi possível registrar a economia.' });
     } finally {
       setSubmitting(false);
     }
@@ -122,6 +148,19 @@ export default function RegisterScreen() {
               </Text>
             )}
           </View>
+
+          {/* Viewer warning banner */}
+          {activeGoal && myRoleByGoal[activeGoal.id] === 'viewer' && (
+            <View style={{ backgroundColor: '#F59E0B' + '20', borderColor: '#F59E0B', borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 16, flexDirection: 'row', gap: 10 }}>
+              <Ionicons name="time-outline" size={22} color="#F59E0B" />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#F59E0B', fontWeight: '700', fontSize: 14, marginBottom: 2 }}>Aguardando aprovação</Text>
+                <Text style={{ color: theme.colors.textSecondary, fontSize: 12, lineHeight: 16 }}>
+                  Você entrou como visualizador. Peça ao dono do objetivo para aprovar seu acesso antes de registrar economias. Isso evita abusos em objetivos compartilhados.
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* Quick Add */}
           {lastSaving && (

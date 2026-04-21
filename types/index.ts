@@ -6,6 +6,9 @@ export interface Goal {
   targetDate: string; // ISO date string
   createdAt: string;
   activeModality: 'daily' | 'weekly' | 'monthly';
+  description?: string;
+  emoji?: string;
+  color?: string;
 }
 
 export interface Category {
@@ -57,7 +60,7 @@ export interface AppData {
 }
 
 // Shared Goals
-export type GoalRole = 'owner' | 'editor' | 'participant';
+export type GoalRole = 'owner' | 'editor' | 'participant' | 'viewer';
 
 export interface GoalMember {
   id: string;
@@ -76,5 +79,29 @@ export interface GoalInvite {
   maxUses: number;
   usedCount: number;
   expiresAt: string;
+  createdAt: string;
+}
+
+export type ActivityAction =
+  | 'joined'
+  | 'left'
+  | 'promoted'
+  | 'demoted'
+  | 'removed'
+  | 'approved'
+  | 'added_saving'
+  | 'edited_saving'
+  | 'deleted_saving'
+  | 'created_invite'
+  | 'edited_goal'
+  | 'completed_goal';
+
+export interface GoalActivity {
+  id: string;
+  goalId: string;
+  userId: string;
+  userName?: string;
+  action: ActivityAction;
+  metadata?: Record<string, any>;
   createdAt: string;
 }

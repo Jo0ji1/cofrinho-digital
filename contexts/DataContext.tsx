@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { Goal, SavingEntry, NotificationSettings, Category, GoalMember, GoalInvite, GoalRole } from '../types';
+import { Goal, SavingEntry, NotificationSettings, Category, GoalMember, GoalInvite, GoalRole, GoalActivity, ActivityAction } from '../types';
 import { storage } from '../utils/storage';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
@@ -30,8 +30,11 @@ interface DataContextType {
   createGoalInvite: (goalId: string, expiresInDays?: number) => Promise<GoalInvite | null>;
   joinGoalByInvite: (inviteCode: string) => Promise<{ success: boolean; goalName?: string; error?: string }>;
   removeGoalMember: (goalId: string, userId: string) => Promise<void>;
-  updateMemberRole: (goalId: string, userId: string, role: 'editor' | 'participant') => Promise<boolean>;
+  updateMemberRole: (goalId: string, userId: string, role: 'editor' | 'participant' | 'viewer') => Promise<boolean>;
   getGoalInvites: (goalId: string) => Promise<GoalInvite[]>;
+  // Activity feed
+  getGoalActivities: (goalId: string, limit?: number) => Promise<GoalActivity[]>;
+  logActivity: (goalId: string, action: ActivityAction, metadata?: Record<string, any>) => Promise<void>;
   // Roles for the current user, keyed by goalId
   myRoleByGoal: Record<string, GoalRole>;
   memberCountByGoal: Record<string, number>;
@@ -145,6 +148,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         targetDate: g.target_date,
         createdAt: g.created_at,
         activeModality: g.active_modality || 'monthly',
+        description: g.description || undefined,
+        emoji: g.emoji || undefined,
+        color: g.color || undefined,
       }));
 
       const mappedSavings: SavingEntry[] = (savingsData || []).map((s: any) => {
@@ -254,6 +260,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         target_amount: g.targetAmount,
         target_date: g.targetDate,
         active_modality: g.activeModality,
+        description: g.description || null,
+        emoji: g.emoji || null,
+        color: g.color || null,
       });
     }
     const updated = [g, ...goals];
@@ -273,7 +282,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
         target_amount: g.targetAmount,
         target_date: g.targetDate,
         active_modality: g.activeModality,
+        description: g.description || null,
+        emoji: g.emoji || null,
+        color: g.color || null,
       });
+      // Log activity if shared
+      if ((memberCountByGoal[g.id] || 0) > 1) {
+        await logActivity(g.id, 'edited_goal', { name: g.name });
+      }
     }
     const updated = goals.map(x => x.id === g.id ? g : x);
     await storage.setGoals(updated);
@@ -308,8 +324,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const addSaving = async (entry: SavingEntry) => {
     // Garantir que goalId está definido
     const entryWithGoal = { ...entry, goalId: entry.goalId || activeGoal?.id };
+    // Security: block viewers from adding savings on shared goals
+    const goalId = entryWithGoal.goalId;
+    if (goalId && myRoleByGoal[goalId] === 'viewer') {
+      throw new Error('Você ainda não tem permissão para adicionar economias neste objetivo. Aguarde o dono aprovar seu acesso.');
+    }
     if (isSupabaseConfigured() && user) {
-      await supabase.from('savings').insert({
+      const { error } = await supabase.from('savings').insert({
         id: entryWithGoal.id,
         user_id: user.id,
         goal_id: entryWithGoal.goalId || null,
@@ -319,6 +340,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
         category_id: entryWithGoal.categoryId || null,
         created_at: entryWithGoal.createdAt,
       });
+      if (error) {
+        throw new Error(error.message || 'Erro ao salvar economia');
+      }
+      // Log activity on shared goals
+      if (goalId && (memberCountByGoal[goalId] || 0) > 1) {
+        await logActivity(goalId, 'added_saving', {
+          amount: entryWithGoal.amount,
+          description: entryWithGoal.description,
+          categoryId: entryWithGoal.categoryId,
+        });
+      }
     }
     const updated = [entryWithGoal, ...savings];
     await storage.setSavings(updated);
@@ -398,14 +430,85 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateMemberRole = async (goalId: string, userId: string, role: 'editor' | 'participant'): Promise<boolean> => {
+  const updateMemberRole = async (goalId: string, userId: string, role: 'editor' | 'participant' | 'viewer'): Promise<boolean> => {
     if (!isSupabaseConfigured() || !user) return false;
+    // Find previous role for activity log
+    const { data: prev } = await supabase
+      .from('goal_members')
+      .select('role')
+      .eq('goal_id', goalId)
+      .eq('user_id', userId)
+      .single();
+    const prevRole = prev?.role;
+
     const { error } = await supabase
       .from('goal_members')
       .update({ role })
       .eq('goal_id', goalId)
       .eq('user_id', userId);
-    return !error;
+    if (error) return false;
+
+    // Log activity
+    const rank = { viewer: 0, participant: 1, editor: 2, owner: 3 } as const;
+    const action: ActivityAction =
+      prevRole === 'viewer' && role !== 'viewer' ? 'approved'
+      : (rank as any)[role] > (rank as any)[prevRole || 'viewer'] ? 'promoted'
+      : 'demoted';
+    await logActivity(goalId, action, { targetUserId: userId, fromRole: prevRole, toRole: role });
+
+    // Update local state if it's the current user
+    if (userId === user.id) {
+      setMyRoleByGoal(prev => ({ ...prev, [goalId]: role }));
+    }
+    return true;
+  };
+
+  const logActivity = async (goalId: string, action: ActivityAction, metadata: Record<string, any> = {}): Promise<void> => {
+    if (!isSupabaseConfigured() || !user) return;
+    try {
+      await supabase.from('goal_activities').insert({
+        goal_id: goalId,
+        user_id: user.id,
+        action,
+        metadata,
+      });
+    } catch {
+      // Silent fail - activity log is non-critical
+    }
+  };
+
+  const getGoalActivities = async (goalId: string, limit = 20): Promise<GoalActivity[]> => {
+    if (!isSupabaseConfigured() || !user) return [];
+    try {
+      const { data } = await supabase
+        .from('goal_activities')
+        .select('*')
+        .eq('goal_id', goalId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      const userIds = Array.from(new Set((data || []).map((a: any) => a.user_id)));
+      let namesMap: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, name')
+          .in('id', userIds);
+        namesMap = Object.fromEntries((profiles || []).map((p: any) => [p.id, p.name || 'Usuário']));
+      }
+
+      return (data || []).map((a: any) => ({
+        id: a.id,
+        goalId: a.goal_id,
+        userId: a.user_id,
+        userName: a.user_id === user.id ? 'Você' : (namesMap[a.user_id] || 'Usuário'),
+        action: a.action,
+        metadata: a.metadata || {},
+        createdAt: a.created_at,
+      }));
+    } catch {
+      return [];
+    }
   };
 
   const createGoalInvite = async (goalId: string, expiresInDays = 7): Promise<GoalInvite | null> => {
@@ -525,6 +628,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addSaving, updateSaving, deleteSaving, setNotifications,
       completeOnboarding, resetAll, refresh: loadData,
       getGoalMembers, createGoalInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites,
+      getGoalActivities, logActivity,
       myRoleByGoal, memberCountByGoal,
     }}>
       {children}

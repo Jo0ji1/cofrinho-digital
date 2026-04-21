@@ -10,17 +10,18 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/colors';
-import { GoalMember, GoalInvite } from '../types';
+import { GoalMember, GoalInvite, GoalActivity } from '../types';
 import { showAlert } from '../utils/alert';
 
 export default function SharedGoalScreen() {
   const { theme } = useTheme();
-  const { activeGoal, savings, getGoalMembers, createGoalInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites, refresh } = useData();
+  const { activeGoal, savings, getGoalMembers, createGoalInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites, getGoalActivities, refresh } = useData();
   const { user } = useAuth();
   const router = useRouter();
 
   const [members, setMembers] = useState<GoalMember[]>([]);
   const [invites, setInvites] = useState<GoalInvite[]>([]);
+  const [activities, setActivities] = useState<GoalActivity[]>([]);
   const [inviteCode, setInviteCode] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,12 +30,14 @@ export default function SharedGoalScreen() {
 
   const loadData = useCallback(async () => {
     if (!activeGoal) return;
-    const [m, inv] = await Promise.all([
+    const [m, inv, act] = await Promise.all([
       getGoalMembers(activeGoal.id),
       getGoalInvites(activeGoal.id),
+      getGoalActivities(activeGoal.id, 15),
     ]);
     setMembers(m);
     setInvites(inv);
+    setActivities(act);
   }, [activeGoal?.id]);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -102,12 +105,44 @@ export default function SharedGoalScreen() {
     }
   };
 
-  const handleChangeRole = (member: GoalMember) => {
-    const newRole = member.role === 'editor' ? 'participant' : 'editor';
-    const label = newRole === 'editor' ? 'promover a Editor' : 'rebaixar a Participante';
+  const handleApprove = (member: GoalMember) => {
     showAlert(
-      'Alterar permissão',
-      `Deseja ${label} ${member.userName}?\n\nEditor pode criar convites e editar o objetivo. Participante apenas registra economias.`,
+      'Aprovar acesso',
+      `Aprovar ${member.userName} como Participante?\n\nParticipantes podem registrar economias no objetivo.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Aprovar', onPress: async () => {
+            const ok = await updateMemberRole(member.goalId, member.userId, 'participant');
+            if (ok) {
+              await loadData();
+              showAlert('✅ Aprovado', `${member.userName} agora pode registrar economias.`);
+            } else {
+              showAlert('Erro', 'Não foi possível aprovar.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handlePromote = (member: GoalMember) => {
+    // Cycle: viewer → participant → editor → participant → viewer
+    let newRole: 'editor' | 'participant' | 'viewer';
+    let description: string;
+    if (member.role === 'participant') {
+      newRole = 'editor';
+      description = 'Editores podem criar convites e editar o objetivo.';
+    } else if (member.role === 'editor') {
+      newRole = 'participant';
+      description = 'Participantes registram economias mas não editam o objetivo.';
+    } else {
+      return; // viewer uses handleApprove
+    }
+    const action = newRole === 'editor' ? 'Promover a Editor' : 'Rebaixar a Participante';
+    showAlert(
+      action,
+      `${action} ${member.userName}?\n\n${description}`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -115,7 +150,6 @@ export default function SharedGoalScreen() {
             const ok = await updateMemberRole(member.goalId, member.userId, newRole);
             if (ok) {
               await loadData();
-              showAlert('Sucesso', `${member.userName} agora é ${newRole === 'editor' ? 'Editor' : 'Participante'}.`);
             } else {
               showAlert('Erro', 'Não foi possível alterar a permissão.');
             }
@@ -153,6 +187,7 @@ export default function SharedGoalScreen() {
     switch (role) {
       case 'owner': return '👑 Dono';
       case 'editor': return '✏️ Editor';
+      case 'viewer': return '⏳ Aguardando aprovação';
       default: return '👤 Participante';
     }
   };
@@ -161,7 +196,8 @@ export default function SharedGoalScreen() {
     switch (role) {
       case 'owner': return '#F59E0B';
       case 'editor': return '#3B82F6';
-      default: return '#6B7280';
+      case 'viewer': return '#F59E0B';
+      default: return '#10B981';
     }
   };
 
@@ -257,7 +293,7 @@ export default function SharedGoalScreen() {
                   return (
                     <View key={m.id} style={[s.memberRow, i < members.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.colors.border }]}>
                       <View style={[s.avatar, { backgroundColor: roleColor(m.role) + '20' }]}>
-                        <Text style={{ fontSize: 16 }}>{m.role === 'owner' ? '👑' : m.role === 'editor' ? '✏️' : '🙂'}</Text>
+                        <Text style={{ fontSize: 16 }}>{m.role === 'owner' ? '👑' : m.role === 'editor' ? '✏️' : m.role === 'viewer' ? '⏳' : '🙂'}</Text>
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={[s.memberName, { color: theme.colors.text }]}>
@@ -266,9 +302,17 @@ export default function SharedGoalScreen() {
                         <Text style={[s.memberRole, { color: roleColor(m.role) }]}>{roleLabel(m.role)}</Text>
                       </View>
 
-                      {/* Role change button (owner manages others) */}
-                      {canManage && (
-                        <TouchableOpacity onPress={() => handleChangeRole(m)} style={s.actionBtn}>
+                      {/* Approve viewer */}
+                      {canManage && m.role === 'viewer' && (
+                        <TouchableOpacity onPress={() => handleApprove(m)} style={[s.actionBtn, { backgroundColor: Colors.primary + '20', borderRadius: 8, paddingHorizontal: 10 }]}>
+                          <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />
+                          <Text style={{ color: Colors.primary, fontWeight: '700', fontSize: 12, marginLeft: 4 }}>Aprovar</Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {/* Promote/demote editor ↔ participant */}
+                      {canManage && (m.role === 'editor' || m.role === 'participant') && (
+                        <TouchableOpacity onPress={() => handlePromote(m)} style={s.actionBtn}>
                           <Ionicons
                             name={m.role === 'editor' ? 'arrow-down-circle-outline' : 'arrow-up-circle-outline'}
                             size={22}
@@ -344,7 +388,68 @@ export default function SharedGoalScreen() {
               );
             })()}
 
-            {/* Create Invite - only for owner/editor */}
+            {/* Activity Feed */}
+            {activities.length > 0 && (
+              <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <Text style={[s.cardTitle, { color: theme.colors.textSecondary }]}>📋 Atividade recente</Text>
+                {activities.map((act, idx) => {
+                  const iconMap: Record<string, { icon: any; color: string }> = {
+                    joined: { icon: 'person-add', color: '#10B981' },
+                    left: { icon: 'exit-outline', color: '#6B7280' },
+                    approved: { icon: 'checkmark-circle', color: '#10B981' },
+                    promoted: { icon: 'arrow-up-circle', color: '#3B82F6' },
+                    demoted: { icon: 'arrow-down-circle', color: '#F59E0B' },
+                    removed: { icon: 'close-circle', color: '#EF4444' },
+                    added_saving: { icon: 'cash-outline', color: '#10B981' },
+                    edited_saving: { icon: 'create-outline', color: '#3B82F6' },
+                    deleted_saving: { icon: 'trash-outline', color: '#EF4444' },
+                    created_invite: { icon: 'mail-outline', color: '#8B5CF6' },
+                    edited_goal: { icon: 'pencil', color: '#3B82F6' },
+                    completed_goal: { icon: 'trophy', color: '#F59E0B' },
+                  };
+                  const labelMap: Record<string, string> = {
+                    joined: 'entrou no objetivo',
+                    left: 'saiu do objetivo',
+                    approved: 'foi aprovado',
+                    promoted: 'foi promovido',
+                    demoted: 'foi rebaixado',
+                    removed: 'foi removido',
+                    added_saving: 'registrou uma economia',
+                    edited_saving: 'editou uma economia',
+                    deleted_saving: 'removeu uma economia',
+                    created_invite: 'criou um convite',
+                    edited_goal: 'editou o objetivo',
+                    completed_goal: 'concluiu o objetivo',
+                  };
+                  const meta = iconMap[act.action] || { icon: 'information-circle-outline', color: '#6B7280' };
+                  const label = labelMap[act.action] || act.action;
+                  const timeAgo = (() => {
+                    const diff = Date.now() - new Date(act.createdAt).getTime();
+                    const min = Math.floor(diff / 60000);
+                    if (min < 1) return 'agora';
+                    if (min < 60) return `${min}min atrás`;
+                    const hr = Math.floor(min / 60);
+                    if (hr < 24) return `${hr}h atrás`;
+                    const d = Math.floor(hr / 24);
+                    if (d < 30) return `${d}d atrás`;
+                    return new Date(act.createdAt).toLocaleDateString('pt-BR');
+                  })();
+                  return (
+                    <View key={act.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: idx < activities.length - 1 ? 1 : 0, borderBottomColor: theme.colors.border }}>
+                      <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: meta.color + '20', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                        <Ionicons name={meta.icon} size={16} color={meta.color} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ color: theme.colors.text, fontSize: 13 }}>
+                          <Text style={{ fontWeight: '700' }}>{act.userName || 'Alguém'}</Text> {label}
+                        </Text>
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 11, marginTop: 1 }}>{timeAgo}</Text>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
             {(() => {
               const myRole = members.find(x => x.userId === user?.id)?.role;
               const canInvite = !myRole || myRole === 'owner' || myRole === 'editor';
