@@ -76,7 +76,7 @@ export default function RegisterAccountScreen() {
             </TouchableOpacity>
             <Text style={[s.title, { color: theme.colors.text }]}>Criar Conta</Text>
             <Text style={[s.subtitle, { color: theme.colors.textSecondary }]}>
-              Preencha seus dados para começar a usar o Vaqui
+              Preencha seus dados para começar a usar o Cofry
             </Text>
           </View>
 

@@ -582,7 +582,8 @@ export default function HomeScreen() {
                   activeOpacity={0.7}
                 >
                   <View style={s.goalOptionTop}>
-                    <View style={[s.goalDot, { backgroundColor: isActive ? Colors.primary : theme.colors.border }]} />
+                    <View style={[s.goalDot, { backgroundColor: g.color || (isActive ? Colors.primary : theme.colors.border) }]} />
+                    <Text style={{ fontSize: 16, marginRight: 4 }}>{g.emoji || '🎯'}</Text>
                     <Text style={[s.goalOptionName, { color: theme.colors.text }]} numberOfLines={1}>{g.name}</Text>
                     {isActive && <Ionicons name="checkmark-circle" size={18} color={Colors.primary} />}
                   </View>
@@ -590,12 +591,12 @@ export default function HomeScreen() {
                     <Text style={[s.goalOptionAmount, { color: theme.colors.textSecondary }]}>
                       {formatCurrency(gTotal)} / {formatCurrency(g.targetAmount)}
                     </Text>
-                    <Text style={[s.goalOptionPct, { color: Colors.primary }]}>
+                    <Text style={[s.goalOptionPct, { color: g.color || Colors.primary }]}>
                       {Math.round(gPct * 100)}%
                     </Text>
                   </View>
                   <View style={[s.goalProgressBg, { backgroundColor: theme.colors.border }]}>
-                    <View style={[s.goalProgressFill, { width: `${Math.round(gPct * 100)}%`, backgroundColor: Colors.primary }]} />
+                    <View style={[s.goalProgressFill, { width: `${Math.round(gPct * 100)}%`, backgroundColor: g.color || Colors.primary }]} />
                   </View>
                 </TouchableOpacity>
               );

@@ -86,12 +86,12 @@ export default function SharedGoalScreen() {
   };
 
   const handleShareInvite = async (code: string) => {
-    const message = `� Entre na minha Vaqui compartilhada!\n\nCódigo de convite: ${code}\n\nBaixe o Vaqui e use este código para economizar junto comigo!`;
+    const message = `🐰 Entre no meu Cofry compartilhado!\n\nCódigo de convite: ${code}\n\nBaixe o Cofry e use este código para economizar junto comigo!`;
     try {
       if (Platform.OS === 'web') {
         // Tentar Web Share API
         if (typeof navigator !== 'undefined' && (navigator as any).share) {
-          await (navigator as any).share({ title: 'Vaqui', text: message });
+          await (navigator as any).share({ title: 'Cofry', text: message });
           return;
         }
         // Fallback: copiar para clipboard
@@ -234,7 +234,7 @@ export default function SharedGoalScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: theme.colors.text }]}>Vaqui Compartilhada</Text>
+        <Text style={[s.headerTitle, { color: theme.colors.text }]}>Cofry Compartilhado</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -560,7 +560,7 @@ export default function SharedGoalScreen() {
               <View style={[s.joinIcon, { backgroundColor: Colors.primary + '15' }]}>
                 <Text style={{ fontSize: 32 }}>🤝</Text>
               </View>
-              <Text style={[s.joinTitle, { color: theme.colors.text }]}>Entrar numa Vaqui</Text>
+              <Text style={[s.joinTitle, { color: theme.colors.text }]}>Entrar num Cofry</Text>
               <Text style={[s.joinDesc, { color: theme.colors.textSecondary }]}>
                 Peça o código de convite para o dono do objetivo e cole abaixo
               </Text>

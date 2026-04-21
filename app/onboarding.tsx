@@ -93,7 +93,7 @@ export default function OnboardingScreen() {
             <View style={s.iconWrap}>
               <Ionicons name="wallet" size={48} color="#fff" />
             </View>
-            <Text style={s.title}>Vaqui</Text>
+            <Text style={s.title}>Cofry</Text>
             <Text style={s.subtitle}>Defina seu objetivo de economia e comece a poupar hoje mesmo!</Text>
           </View>
 

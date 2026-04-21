@@ -260,7 +260,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }, 500);
     };
     const ch = supabase
-      .channel('vaqui-sync-' + user.id)
+      .channel('cofry-sync-' + user.id)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'savings' }, trigger)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'goal_members' }, trigger)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'goals' }, trigger)

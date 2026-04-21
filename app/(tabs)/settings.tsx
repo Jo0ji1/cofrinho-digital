@@ -16,6 +16,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ModalityCard } from '../../components/ModalityCard';
 import { getModalityInfos } from '../../utils/calculations';
 import { formatCurrency, maskCurrency, parseCurrency } from '../../utils/currency';
+import { savingsToCSV, downloadCSV } from '../../utils/export';
 import { requestNotificationPermissions, scheduleNotification, cancelAllNotifications } from '../../utils/notifications';
 import { ModalityType, Goal } from '../../types';
 import { Colors } from '../../constants/colors';
@@ -31,6 +32,9 @@ export default function SettingsScreen() {
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalName, setGoalName] = useState(activeGoal?.name || '');
   const [goalAmount, setGoalAmount] = useState(activeGoal ? formatCurrency(activeGoal.targetAmount) : '');
+  const [goalEmoji, setGoalEmoji] = useState(activeGoal?.emoji || '🐷');
+  const [goalColor, setGoalColor] = useState(activeGoal?.color || '#10B981');
+  const [goalDescription, setGoalDescription] = useState(activeGoal?.description || '');
   const [showNewGoal, setShowNewGoal] = useState(false);
   const [newGoalName, setNewGoalName] = useState('');
   const [newGoalAmount, setNewGoalAmount] = useState('');
@@ -84,7 +88,14 @@ export default function SettingsScreen() {
       show({ type: 'warning', title: 'Atenção', message: 'Informe um valor válido.' });
       return;
     }
-    await updateGoal({ ...activeGoal, name: goalName.trim(), targetAmount: amount });
+    await updateGoal({
+      ...activeGoal,
+      name: goalName.trim(),
+      targetAmount: amount,
+      emoji: goalEmoji || undefined,
+      color: goalColor || undefined,
+      description: goalDescription.trim() || undefined,
+    });
     setEditingGoal(false);
     show({ type: 'success', title: 'Salvo', message: 'Objetivo atualizado com sucesso!' });
   }
@@ -201,41 +212,40 @@ export default function SettingsScreen() {
     });
   }
 
-  async function handleExportCSV() {
-    if (!savings.length) {
-      show({ type: 'warning', title: 'Sem dados', message: 'Você ainda não tem economias registradas para exportar.' });
+  function handleExportCSV() {
+    if (!activeGoal) {
+      show({ type: 'warning', title: 'Atenção', message: 'Selecione um objetivo primeiro.' });
       return;
     }
-    try {
-      const header = 'Data,Valor,Descrição,Categoria\n';
-      const sorted = [...savings].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      const rows = sorted
-        .map(s => {
-          const date = new Date(s.date).toLocaleDateString('pt-BR');
-          const amount = s.amount.toFixed(2).replace('.', ',');
-          const desc = (s.description || '').replaceAll('"', '""');
-          const cat = s.categoryName || 'Sem categoria';
-          return `${date},"${desc}",${amount},"${cat}"`;
-        })
-        .join('\n');
-      const csv = header + rows;
-
-      if (Platform.OS === 'web') {
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'cofrinho-digital.csv';
-        link.click();
-        URL.revokeObjectURL(url);
+    const goalSavings = savings
+      .filter(sv => sv.goalId === activeGoal.id || (!sv.goalId && activeGoal === goals[0]))
+      .slice()
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    if (goalSavings.length === 0) {
+      show({ type: 'warning', title: 'Nada para exportar', message: 'Este objetivo ainda não tem economias.' });
+      return;
+    }
+    const csv = savingsToCSV(goalSavings, activeGoal);
+    const safeName = activeGoal.name.replace(/[^a-zA-Z0-9\-_]/g, '_').slice(0, 40) || 'objetivo';
+    const filename = `cofry-${safeName}-${new Date().toISOString().slice(0, 10)}.csv`;
+    if (Platform.OS === 'web') {
+      const ok = downloadCSV(csv, filename);
+      if (ok) {
+        show({ type: 'success', title: 'Exportado', message: `${goalSavings.length} registros baixados.` });
       } else {
-        const file = new ExpoFile(Paths.cache, 'cofrinho-digital.csv');
-        file.create({ overwrite: true });
-        file.write(csv);
-        await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', dialogTitle: 'Exportar economias' });
+        show({ type: 'error', title: 'Erro', message: 'Não foi possível exportar.' });
       }
-    } catch {
-      show({ type: 'error', title: 'Erro', message: 'Não foi possível exportar os dados.' });
+    } else {
+      (async () => {
+        try {
+          const file = new ExpoFile(Paths.cache, filename);
+          file.create({ overwrite: true });
+          file.write('\uFEFF' + csv);
+          await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', dialogTitle: 'Exportar economias' });
+        } catch {
+          show({ type: 'error', title: 'Erro', message: 'Não foi possível exportar os dados.' });
+        }
+      })();
     }
   }
 
@@ -356,6 +366,9 @@ export default function SettingsScreen() {
                         onPress={() => {
                           setGoalName(g.name);
                           setGoalAmount(formatCurrency(g.targetAmount));
+                          setGoalEmoji(g.emoji || '🐷');
+                          setGoalColor(g.color || '#10B981');
+                          setGoalDescription(g.description || '');
                           setEditingGoal(true);
                         }}
                       >
@@ -400,6 +413,38 @@ export default function SettingsScreen() {
         {editingGoal && (
           <View style={[s.section, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <Text style={[s.sectionTitle, { color: theme.colors.text, marginBottom: 12 }]}>Editar Objetivo</Text>
+
+            <Text style={[s.label, { color: theme.colors.textSecondary }]}>Ícone</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              {['🐷','🎯','✈️','🏠','🚗','💍','🎓','💻','🎮','📱','👶','🐾','🏖️','💰'].map(em => (
+                <TouchableOpacity
+                  key={em}
+                  onPress={() => setGoalEmoji(em)}
+                  style={{
+                    width: 42, height: 42, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
+                    backgroundColor: goalEmoji === em ? Colors.primary + '30' : theme.colors.background,
+                    borderWidth: 2, borderColor: goalEmoji === em ? Colors.primary : theme.colors.border,
+                  }}
+                >
+                  <Text style={{ fontSize: 22 }}>{em}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={[s.label, { color: theme.colors.textSecondary }]}>Cor</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              {['#10B981','#3B82F6','#F59E0B','#EF4444','#8B5CF6','#EC4899','#14B8A6','#F97316'].map(c => (
+                <TouchableOpacity
+                  key={c}
+                  onPress={() => setGoalColor(c)}
+                  style={{
+                    width: 36, height: 36, borderRadius: 18, backgroundColor: c,
+                    borderWidth: goalColor === c ? 3 : 0, borderColor: theme.colors.text,
+                  }}
+                />
+              ))}
+            </View>
+
             <Text style={[s.label, { color: theme.colors.textSecondary }]}>Nome do objetivo</Text>
             <TextInput
               style={[s.input, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
@@ -407,6 +452,7 @@ export default function SettingsScreen() {
               onChangeText={setGoalName}
               placeholder="Nome do objetivo"
               placeholderTextColor={theme.colors.textSecondary}
+              maxLength={50}
             />
             <Text style={[s.label, { color: theme.colors.textSecondary }]}>Valor alvo</Text>
             <TextInput
@@ -416,6 +462,16 @@ export default function SettingsScreen() {
               placeholder="R$ 0,00"
               placeholderTextColor={theme.colors.textSecondary}
               keyboardType="numeric"
+            />
+            <Text style={[s.label, { color: theme.colors.textSecondary }]}>Descrição (opcional)</Text>
+            <TextInput
+              style={[s.input, { color: theme.colors.text, borderColor: theme.colors.border, backgroundColor: theme.colors.background, minHeight: 60, textAlignVertical: 'top' }]}
+              value={goalDescription}
+              onChangeText={setGoalDescription}
+              placeholder="Ex: Viagem em família de 15 dias"
+              placeholderTextColor={theme.colors.textSecondary}
+              multiline
+              maxLength={200}
             />
             <View style={s.editBtnsRow}>
               <TouchableOpacity style={[s.outlineBtn, { borderColor: theme.colors.border, flex: 1 }]} onPress={() => setEditingGoal(false)}>
@@ -455,6 +511,22 @@ export default function SettingsScreen() {
                 ))}
               </View>
             )}
+          </View>
+        )}
+
+        {/* Export CSV */}
+        {activeGoal && (
+          <View style={[s.section, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <View style={s.sectionHeader}>
+              <Ionicons name="download-outline" size={18} color={Colors.primary} />
+              <Text style={[s.sectionTitle, { color: theme.colors.text }]}>Exportar dados</Text>
+            </View>
+            <Text style={[s.infoSub, { color: theme.colors.textSecondary }]}>
+              Baixe um CSV com todas as economias deste objetivo (abre no Excel/Sheets).
+            </Text>
+            <TouchableOpacity style={[s.outlineBtn, { borderColor: Colors.primary }]} onPress={handleExportCSV}>
+              <Text style={[s.outlineBtnText, { color: Colors.primary }]}>📊 Baixar CSV</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -546,7 +618,7 @@ export default function SettingsScreen() {
         {/* Version */}
         <View style={s.versionRow}>
           <Ionicons name="information-circle-outline" size={14} color={theme.colors.textSecondary} />
-          <Text style={[s.versionText, { color: theme.colors.textSecondary }]}>Vaqui v3.1.0</Text>
+          <Text style={[s.versionText, { color: theme.colors.textSecondary }]}>Cofry v3.2.0</Text>
         </View>
       </ScrollView>
 
