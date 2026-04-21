@@ -30,7 +30,7 @@ const MODALITY_LABELS: Record<string, string> = {
 export default function HomeScreen() {
   const { theme, isDark } = useTheme();
   const data = useGoal();
-  const { goals, activeGoal, setActiveGoal, savings, categories, refresh } = useData();
+  const { goals, activeGoal, setActiveGoal, savings, categories, refresh, memberCountByGoal } = useData();
   const { width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
@@ -258,6 +258,12 @@ export default function HomeScreen() {
               <Text style={[s.goalName, { color: theme.colors.text }]} numberOfLines={1}>{goal!.name}</Text>
               {goals.length > 1 && (
                 <Ionicons name="chevron-down" size={18} color={theme.colors.textSecondary} style={{ marginLeft: 4 }} />
+              )}
+              {activeGoal && (memberCountByGoal[activeGoal.id] || 0) > 1 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#8B5CF6' + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, marginLeft: 8 }}>
+                  <Ionicons name="people" size={12} color="#8B5CF6" />
+                  <Text style={{ fontSize: 11, color: '#8B5CF6', fontWeight: '600' }}>{memberCountByGoal[activeGoal.id]}</Text>
+                </View>
               )}
             </View>
             {goals.length > 1 && (
@@ -511,6 +517,7 @@ export default function HomeScreen() {
                     )}
                     <Text style={[s.pointDetailDesc, { color: theme.colors.textSecondary }]} numberOfLines={1}>
                       {entry.description || entry.categoryName || 'Economia'}
+                      {entry.authorName && activeGoal && (memberCountByGoal[activeGoal.id] || 0) > 1 ? ` • ${entry.authorName}` : ''}
                     </Text>
                     <Text style={[s.pointDetailAmount, { color: theme.colors.text }]}>
                       {formatCurrency(entry.amount)}

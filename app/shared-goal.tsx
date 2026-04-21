@@ -15,7 +15,7 @@ import { showAlert } from '../utils/alert';
 
 export default function SharedGoalScreen() {
   const { theme } = useTheme();
-  const { activeGoal, getGoalMembers, createGoalInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites, refresh } = useData();
+  const { activeGoal, savings, getGoalMembers, createGoalInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites, refresh } = useData();
   const { user } = useAuth();
   const router = useRouter();
 
@@ -305,7 +305,51 @@ export default function SharedGoalScreen() {
               </View>
             )}
 
-            {/* Create Invite */}
+            {/* Contribution breakdown per member */}
+            {activeGoal && members.length > 1 && (() => {
+              const goalSavings = savings.filter(sv => sv.goalId === activeGoal.id);
+              const totalContrib = goalSavings.reduce((sum, sv) => sum + sv.amount, 0);
+              if (totalContrib === 0) return null;
+              const perMember = members.map(m => {
+                const memberSavings = goalSavings.filter(sv => sv.userId === m.userId);
+                const amount = memberSavings.reduce((sum, sv) => sum + sv.amount, 0);
+                return { member: m, amount, count: memberSavings.length };
+              }).sort((a, b) => b.amount - a.amount);
+              return (
+                <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                  <Text style={[s.cardTitle, { color: theme.colors.textSecondary }]}>Contribuições</Text>
+                  {perMember.map(pm => {
+                    const pct = totalContrib > 0 ? (pm.amount / totalContrib) * 100 : 0;
+                    const isMe = pm.member.userId === user?.id;
+                    return (
+                      <View key={pm.member.id} style={{ marginBottom: 12 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <Text style={{ color: theme.colors.text, fontWeight: '600', fontSize: 13 }}>
+                            {pm.member.userName}{isMe ? ' (você)' : ''}
+                          </Text>
+                          <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '600' }}>
+                            R$ {pm.amount.toFixed(2).replace('.', ',')}
+                          </Text>
+                        </View>
+                        <View style={{ height: 6, backgroundColor: theme.colors.background, borderRadius: 3, overflow: 'hidden' }}>
+                          <View style={{ width: `${pct}%`, height: '100%', backgroundColor: roleColor(pm.member.role) }} />
+                        </View>
+                        <Text style={{ color: theme.colors.textSecondary, fontSize: 10, marginTop: 2 }}>
+                          {pct.toFixed(1)}% • {pm.count} registro{pm.count !== 1 ? 's' : ''}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              );
+            })()}
+
+            {/* Create Invite - only for owner/editor */}
+            {(() => {
+              const myRole = members.find(x => x.userId === user?.id)?.role;
+              const canInvite = !myRole || myRole === 'owner' || myRole === 'editor';
+              if (!canInvite) return null;
+              return (
             <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <Text style={[s.cardTitle, { color: theme.colors.textSecondary }]}>Convidar pessoas</Text>
               <Text style={[s.desc, { color: theme.colors.textSecondary }]}>
@@ -367,6 +411,8 @@ export default function SharedGoalScreen() {
                 </View>
               )}
             </View>
+              );
+            })()}
           </>
         ) : (
           /* Join Tab */

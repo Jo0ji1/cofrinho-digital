@@ -23,6 +23,8 @@ export interface SavingEntry {
   date: string; // ISO date string
   createdAt: string;
   goalId?: string;
+  userId?: string;
+  authorName?: string;
   categoryId?: string;
   categoryName?: string;
   categoryIcon?: string;

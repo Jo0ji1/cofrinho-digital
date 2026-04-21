@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useData } from '../../contexts/DataContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
 import { ConfirmModal } from '../../components/ConfirmModal';
 import { CategoryIcon } from '../../components/CategoryIcon';
@@ -24,7 +25,8 @@ const FILTERS: { label: string; value: FilterPeriod }[] = [
 
 export default function HistoryScreen() {
   const { theme } = useTheme();
-  const { deleteSaving, updateSaving, categories, refresh, goals, activeGoal } = useData();
+  const { deleteSaving, updateSaving, categories, refresh, goals, activeGoal, myRoleByGoal, memberCountByGoal } = useData();
+  const { user } = useAuth();
   const { show } = useToast();
   const [filter, setFilter] = useState<FilterPeriod>('all');
   const [goalFilter, setGoalFilter] = useState<string | null>(null); // null = all goals
@@ -194,7 +196,14 @@ export default function HistoryScreen() {
             data={filtered}
             keyExtractor={item => item.id}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} colors={[Colors.primary]} />}
-            renderItem={({ item }) => (
+            renderItem={({ item }) => {
+              const itemGoalId = item.goalId;
+              const isShared = itemGoalId ? (memberCountByGoal[itemGoalId] || 0) > 1 : false;
+              const myRole = itemGoalId ? myRoleByGoal[itemGoalId] : undefined;
+              const isMine = !item.userId || item.userId === user?.id;
+              const canEditEntry = isMine || myRole === 'owner' || myRole === 'editor';
+              const canDeleteEntry = isMine || myRole === 'owner';
+              return (
               <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                 <View style={s.cardTop}>
                   <View style={[s.iconBox, { backgroundColor: (item.categoryColor || Colors.primary) + '20' }]}>
@@ -223,22 +232,34 @@ export default function HistoryScreen() {
                           </View>
                         ) : null;
                       })()}
+                      {isShared && item.authorName && (
+                        <View style={[s.badge, { backgroundColor: '#8B5CF6' + '20' }]}>
+                          <Text style={[s.badgeText, { color: '#8B5CF6' }]}>👤 {item.authorName}</Text>
+                        </View>
+                      )}
                     </View>
                   </View>
                   <Text style={[s.cardAmount, { color: Colors.primary }]}>{formatCurrency(item.amount)}</Text>
                 </View>
-                <View style={s.cardActions}>
-                  <TouchableOpacity style={[s.actionBtn, { borderColor: Colors.primary + '40' }]} onPress={() => openEdit(item)}>
-                    <Ionicons name="pencil-outline" size={14} color={Colors.primary} />
-                    <Text style={[s.actionText, { color: Colors.primary }]}>Editar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[s.actionBtn, { borderColor: Colors.error + '40' }]} onPress={() => setDeleteTarget(item)}>
-                    <Ionicons name="trash-outline" size={14} color={Colors.error} />
-                    <Text style={[s.actionText, { color: Colors.error }]}>Excluir</Text>
-                  </TouchableOpacity>
-                </View>
+                {(canEditEntry || canDeleteEntry) && (
+                  <View style={s.cardActions}>
+                    {canEditEntry && (
+                      <TouchableOpacity style={[s.actionBtn, { borderColor: Colors.primary + '40' }]} onPress={() => openEdit(item)}>
+                        <Ionicons name="pencil-outline" size={14} color={Colors.primary} />
+                        <Text style={[s.actionText, { color: Colors.primary }]}>Editar</Text>
+                      </TouchableOpacity>
+                    )}
+                    {canDeleteEntry && (
+                      <TouchableOpacity style={[s.actionBtn, { borderColor: Colors.error + '40' }]} onPress={() => setDeleteTarget(item)}>
+                        <Ionicons name="trash-outline" size={14} color={Colors.error} />
+                        <Text style={[s.actionText, { color: Colors.error }]}>Excluir</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
               </View>
-            )}
+              );
+            }}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 20 }}
           />

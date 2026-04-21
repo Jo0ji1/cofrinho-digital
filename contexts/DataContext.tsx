@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { Goal, SavingEntry, NotificationSettings, Category, GoalMember, GoalInvite } from '../types';
+import { Goal, SavingEntry, NotificationSettings, Category, GoalMember, GoalInvite, GoalRole } from '../types';
 import { storage } from '../utils/storage';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useAuth } from './AuthContext';
@@ -32,6 +32,9 @@ interface DataContextType {
   removeGoalMember: (goalId: string, userId: string) => Promise<void>;
   updateMemberRole: (goalId: string, userId: string, role: 'editor' | 'participant') => Promise<boolean>;
   getGoalInvites: (goalId: string) => Promise<GoalInvite[]>;
+  // Roles for the current user, keyed by goalId
+  myRoleByGoal: Record<string, GoalRole>;
+  memberCountByGoal: Record<string, number>;
 }
 
 const DataContext = createContext<DataContextType>({} as DataContextType);
@@ -58,6 +61,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   });
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [myRoleByGoal, setMyRoleByGoal] = useState<Record<string, GoalRole>>({});
+  const [memberCountByGoal, setMemberCountByGoal] = useState<Record<string, number>>({});
 
   const activeGoal = goals.find(g => g.id === activeGoalId) || goals[0] || null;
 
@@ -83,6 +88,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       const allGoalIds = (goalsData || []).map((g: any) => g.id as string);
 
+      // Carregar contagem de membros e role do usuário por goal
+      let rolesMap: Record<string, GoalRole> = {};
+      let countsMap: Record<string, number> = {};
+      if (allGoalIds.length > 0) {
+        const { data: allMembers } = await supabase
+          .from('goal_members')
+          .select('goal_id, user_id, role')
+          .in('goal_id', allGoalIds);
+        (allMembers || []).forEach((m: any) => {
+          countsMap[m.goal_id] = (countsMap[m.goal_id] || 0) + 1;
+          if (m.user_id === user.id) rolesMap[m.goal_id] = m.role;
+        });
+      }
+      // Se ainda não tem role registrado mas o usuário é dono do goal (legacy), assumir owner
+      (goalsData || []).forEach((g: any) => {
+        if (!rolesMap[g.id] && g.user_id === user.id) rolesMap[g.id] = 'owner';
+      });
+
       // 3) Carregar savings próprios + savings dos goals compartilhados
       let savingsQuery = supabase.from('savings').select('*');
       if (allGoalIds.length > 0) {
@@ -98,6 +121,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
         .select('*')
         .or('is_default.eq.true,user_id.eq.' + user.id)
         .order('name');
+
+      // 5) Carregar nomes dos autores das economias (para goals compartilhados)
+      const authorIds = Array.from(
+        new Set((savingsData || []).map((s: any) => s.user_id).filter((id: any) => id && id !== user.id))
+      );
+      let authorsMap: Record<string, string> = {};
+      if (authorIds.length > 0) {
+        const { data: authorsData } = await supabase
+          .from('profiles')
+          .select('id, name')
+          .in('id', authorIds);
+        authorsMap = Object.fromEntries(
+          (authorsData || []).map((p: any) => [p.id, p.name || 'Usuário'])
+        );
+      }
 
       const mappedGoals: Goal[] = (goalsData || []).map((g: any) => ({
         id: g.id,
@@ -118,6 +156,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           date: s.date,
           createdAt: s.created_at,
           goalId: s.goal_id || (mappedGoals[0]?.id ?? undefined),
+          userId: s.user_id,
+          authorName: s.user_id === user.id ? 'Você' : (authorsMap[s.user_id] || undefined),
           categoryId: s.category_id,
           categoryName: cat?.name,
           categoryIcon: cat?.icon,
@@ -137,6 +177,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         goals: mappedGoals,
         savings: mappedSavings,
         categories: mappedCategories.length > 0 ? mappedCategories : DEFAULT_CATEGORIES,
+        rolesMap,
+        countsMap,
       };
     } catch {
       return null;
@@ -153,6 +195,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setGoalsState(supaData.goals);
           setSavingsState(supaData.savings);
           setCategoriesState(supaData.categories);
+          setMyRoleByGoal(supaData.rolesMap || {});
+          setMemberCountByGoal(supaData.countsMap || {});
           // Carregar active goal ID
           const storedActiveId = await storage.getActiveGoalId();
           const validId = supaData.goals.find(g => g.id === storedActiveId)?.id || supaData.goals[0]?.id || null;
@@ -481,6 +525,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addSaving, updateSaving, deleteSaving, setNotifications,
       completeOnboarding, resetAll, refresh: loadData,
       getGoalMembers, createGoalInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites,
+      myRoleByGoal, memberCountByGoal,
     }}>
       {children}
     </DataContext.Provider>

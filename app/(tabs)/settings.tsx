@@ -22,7 +22,7 @@ import { Colors } from '../../constants/colors';
 
 export default function SettingsScreen() {
   const { theme, themeMode, setThemeMode } = useTheme();
-  const { goals, activeGoal, setActiveGoal, updateGoal, addGoal, deleteGoal, savings, notifications, setNotifications, resetAll } = useData();
+  const { goals, activeGoal, setActiveGoal, updateGoal, addGoal, deleteGoal, savings, notifications, setNotifications, resetAll, myRoleByGoal, memberCountByGoal, removeGoalMember, refresh } = useData();
   const { user, signOut, isConfigured } = useAuth();
   const { show } = useToast();
   const router = useRouter();
@@ -148,6 +148,27 @@ export default function SettingsScreen() {
   function handleDeleteGoal(goalToDelete: Goal) {
     if (goals.length <= 1) {
       show({ type: 'warning', title: 'Atenção', message: 'Você precisa ter pelo menos um objetivo.' });
+      return;
+    }
+    const role = myRoleByGoal[goalToDelete.id];
+    const isOwner = role === 'owner' || !role;
+    if (!isOwner) {
+      // Não é dono — sair do objetivo compartilhado
+      showConfirm({
+        title: 'Sair do objetivo',
+        message: `Deseja sair do objetivo "${goalToDelete.name}"?`,
+        confirmText: 'Sair',
+        destructive: true,
+        icon: 'exit-outline',
+        onConfirm: async () => {
+          hideConfirm();
+          if (user) {
+            await removeGoalMember(goalToDelete.id, user.id);
+            await refresh();
+            show({ type: 'success', title: 'Pronto', message: 'Você saiu do objetivo.' });
+          }
+        },
+      });
       return;
     }
     const savingsCount = savings.filter(s => s.goalId === goalToDelete.id).length;
@@ -282,6 +303,11 @@ export default function SettingsScreen() {
             const gSavings = savings.filter(sv => !sv.goalId || sv.goalId === g.id);
             const gTotal = gSavings.reduce((sum, sv) => sum + sv.amount, 0);
             const gPct = g.targetAmount > 0 ? Math.min(1, gTotal / g.targetAmount) : 0;
+            const role = myRoleByGoal[g.id];
+            const memberCount = memberCountByGoal[g.id] || 0;
+            const isShared = memberCount > 1;
+            const canEdit = role === 'owner' || role === 'editor';
+            const canDelete = role === 'owner';
             return (
               <View
                 key={g.id}
@@ -300,33 +326,60 @@ export default function SettingsScreen() {
                 >
                   <View style={[s.goalDot, { backgroundColor: isActive ? Colors.primary : theme.colors.border }]} />
                   <View style={{ flex: 1 }}>
-                    <Text style={[s.goalItemName, { color: theme.colors.text }]}>{g.name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <Text style={[s.goalItemName, { color: theme.colors.text }]}>{g.name}</Text>
+                      {isShared && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#8B5CF6' + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 }}>
+                          <Ionicons name="people" size={10} color="#8B5CF6" />
+                          <Text style={{ fontSize: 10, color: '#8B5CF6', fontWeight: '600' }}>{memberCount}</Text>
+                        </View>
+                      )}
+                      {role && role !== 'owner' && (
+                        <View style={{ backgroundColor: (role === 'editor' ? '#3B82F6' : '#6B7280') + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 }}>
+                          <Text style={{ fontSize: 10, color: role === 'editor' ? '#3B82F6' : '#6B7280', fontWeight: '600' }}>
+                            {role === 'editor' ? 'Editor' : 'Participante'}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={[s.goalItemSub, { color: theme.colors.textSecondary }]}>
                       {formatCurrency(gTotal)} / {formatCurrency(g.targetAmount)} ({Math.round(gPct * 100)}%)
                     </Text>
                   </View>
                   {isActive && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} />}
                 </TouchableOpacity>
-                {isActive && (
+                {isActive && (canEdit || canDelete) && (
                   <View style={s.goalItemActions}>
-                    <TouchableOpacity
-                      style={[s.goalActionBtn, { borderColor: Colors.primary + '40' }]}
-                      onPress={() => {
-                        setGoalName(g.name);
-                        setGoalAmount(formatCurrency(g.targetAmount));
-                        setEditingGoal(true);
-                      }}
-                    >
-                      <Ionicons name="pencil-outline" size={14} color={Colors.primary} />
-                      <Text style={[s.goalActionText, { color: Colors.primary }]}>Editar</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[s.goalActionBtn, { borderColor: Colors.error + '40' }]}
-                      onPress={() => handleDeleteGoal(g)}
-                    >
-                      <Ionicons name="trash-outline" size={14} color={Colors.error} />
-                      <Text style={[s.goalActionText, { color: Colors.error }]}>Excluir</Text>
-                    </TouchableOpacity>
+                    {canEdit && (
+                      <TouchableOpacity
+                        style={[s.goalActionBtn, { borderColor: Colors.primary + '40' }]}
+                        onPress={() => {
+                          setGoalName(g.name);
+                          setGoalAmount(formatCurrency(g.targetAmount));
+                          setEditingGoal(true);
+                        }}
+                      >
+                        <Ionicons name="pencil-outline" size={14} color={Colors.primary} />
+                        <Text style={[s.goalActionText, { color: Colors.primary }]}>Editar</Text>
+                      </TouchableOpacity>
+                    )}
+                    {canDelete ? (
+                      <TouchableOpacity
+                        style={[s.goalActionBtn, { borderColor: Colors.error + '40' }]}
+                        onPress={() => handleDeleteGoal(g)}
+                      >
+                        <Ionicons name="trash-outline" size={14} color={Colors.error} />
+                        <Text style={[s.goalActionText, { color: Colors.error }]}>Excluir</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        style={[s.goalActionBtn, { borderColor: Colors.error + '40' }]}
+                        onPress={() => handleDeleteGoal(g)}
+                      >
+                        <Ionicons name="exit-outline" size={14} color={Colors.error} />
+                        <Text style={[s.goalActionText, { color: Colors.error }]}>Sair</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 )}
               </View>
