@@ -30,6 +30,7 @@ interface DataContextType {
   createGoalInvite: (goalId: string, expiresInDays?: number) => Promise<GoalInvite | null>;
   joinGoalByInvite: (inviteCode: string) => Promise<{ success: boolean; goalName?: string; error?: string }>;
   removeGoalMember: (goalId: string, userId: string) => Promise<void>;
+  updateMemberRole: (goalId: string, userId: string, role: 'editor' | 'participant') => Promise<boolean>;
   getGoalInvites: (goalId: string) => Promise<GoalInvite[]>;
 }
 
@@ -63,21 +64,35 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const loadFromSupabase = useCallback(async () => {
     if (!user) return null;
     try {
-      // Carregar todas as metas
-      const { data: goalsData } = await supabase
-        .from('goals')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      // 1) Descobrir IDs de goals onde o usuário é membro (compartilhados)
+      const { data: membershipData } = await supabase
+        .from('goal_members')
+        .select('goal_id')
+        .eq('user_id', user.id);
+      const memberGoalIds = (membershipData || []).map((m: any) => m.goal_id as string);
 
-      // Carregar economias
-      const { data: savingsData } = await supabase
-        .from('savings')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('date', { ascending: false });
+      // 2) Carregar goals próprios + goals compartilhados
+      // Como RLS já permite ver os dois, fazemos uma única query com .or()
+      let goalsQuery = supabase.from('goals').select('*');
+      if (memberGoalIds.length > 0) {
+        goalsQuery = goalsQuery.or(`user_id.eq.${user.id},id.in.(${memberGoalIds.join(',')})`);
+      } else {
+        goalsQuery = goalsQuery.eq('user_id', user.id);
+      }
+      const { data: goalsData } = await goalsQuery.order('created_at', { ascending: false });
 
-      // Carregar categorias
+      const allGoalIds = (goalsData || []).map((g: any) => g.id as string);
+
+      // 3) Carregar savings próprios + savings dos goals compartilhados
+      let savingsQuery = supabase.from('savings').select('*');
+      if (allGoalIds.length > 0) {
+        savingsQuery = savingsQuery.or(`user_id.eq.${user.id},goal_id.in.(${allGoalIds.join(',')})`);
+      } else {
+        savingsQuery = savingsQuery.eq('user_id', user.id);
+      }
+      const { data: savingsData } = await savingsQuery.order('date', { ascending: false });
+
+      // 4) Carregar categorias
       const { data: catData } = await supabase
         .from('categories')
         .select('*')
@@ -308,22 +323,45 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const getGoalMembers = async (goalId: string): Promise<GoalMember[]> => {
     if (!isSupabaseConfigured() || !user) return [];
     try {
-      const { data } = await supabase
+      const { data: membersData } = await supabase
         .from('goal_members')
-        .select('*, profiles(name)')
+        .select('*')
         .eq('goal_id', goalId)
         .order('joined_at');
-      return (data || []).map((m: any) => ({
+
+      const userIds = (membersData || []).map((m: any) => m.user_id);
+      let profilesMap: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, name')
+          .in('id', userIds);
+        profilesMap = Object.fromEntries(
+          (profilesData || []).map((p: any) => [p.id, p.name || 'Usuário'])
+        );
+      }
+
+      return (membersData || []).map((m: any) => ({
         id: m.id,
         goalId: m.goal_id,
         userId: m.user_id,
-        userName: m.profiles?.name || 'Usuário',
+        userName: profilesMap[m.user_id] || (m.user_id === user.id ? 'Você' : 'Usuário'),
         role: m.role,
         joinedAt: m.joined_at,
       }));
     } catch {
       return [];
     }
+  };
+
+  const updateMemberRole = async (goalId: string, userId: string, role: 'editor' | 'participant'): Promise<boolean> => {
+    if (!isSupabaseConfigured() || !user) return false;
+    const { error } = await supabase
+      .from('goal_members')
+      .update({ role })
+      .eq('goal_id', goalId)
+      .eq('user_id', userId);
+    return !error;
   };
 
   const createGoalInvite = async (goalId: string, expiresInDays = 7): Promise<GoalInvite | null> => {
@@ -442,7 +480,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setGoal, addGoal, updateGoal, deleteGoal, setActiveGoal: setActiveGoalFn,
       addSaving, updateSaving, deleteSaving, setNotifications,
       completeOnboarding, resetAll, refresh: loadData,
-      getGoalMembers, createGoalInvite, joinGoalByInvite, removeGoalMember, getGoalInvites,
+      getGoalMembers, createGoalInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites,
     }}>
       {children}
     </DataContext.Provider>

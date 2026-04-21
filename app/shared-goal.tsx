@@ -15,7 +15,7 @@ import { showAlert } from '../utils/alert';
 
 export default function SharedGoalScreen() {
   const { theme } = useTheme();
-  const { activeGoal, getGoalMembers, createGoalInvite, joinGoalByInvite, removeGoalMember, getGoalInvites } = useData();
+  const { activeGoal, getGoalMembers, createGoalInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites, refresh } = useData();
   const { user } = useAuth();
   const router = useRouter();
 
@@ -88,15 +88,41 @@ export default function SharedGoalScreen() {
     }
     setLoading(true);
     const result = await joinGoalByInvite(code);
+    if (result.success) {
+      await refresh();
+    }
     setLoading(false);
     if (result.success) {
-      showAlert('Sucesso! 🎉', `Você entrou no objetivo "${result.goalName}"!`, [
+      showAlert('Sucesso! 🎉', `Você entrou no objetivo "${result.goalName}"!\n\nVá para a aba Início para visualizá-lo.`, [
         { text: 'OK', onPress: () => router.back() },
       ]);
       setJoinCode('');
     } else {
       showAlert('Erro', result.error || 'Não foi possível entrar no objetivo');
     }
+  };
+
+  const handleChangeRole = (member: GoalMember) => {
+    const newRole = member.role === 'editor' ? 'participant' : 'editor';
+    const label = newRole === 'editor' ? 'promover a Editor' : 'rebaixar a Participante';
+    showAlert(
+      'Alterar permissão',
+      `Deseja ${label} ${member.userName}?\n\nEditor pode criar convites e editar o objetivo. Participante apenas registra economias.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Confirmar', onPress: async () => {
+            const ok = await updateMemberRole(member.goalId, member.userId, newRole);
+            if (ok) {
+              await loadData();
+              showAlert('Sucesso', `${member.userName} agora é ${newRole === 'editor' ? 'Editor' : 'Participante'}.`);
+            } else {
+              showAlert('Erro', 'Não foi possível alterar a permissão.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleRemoveMember = (member: GoalMember) => {
@@ -181,7 +207,7 @@ export default function SharedGoalScreen() {
         {tab === 'members' ? (
           <>
             {/* Current Goal Info */}
-            {activeGoal && (
+            {activeGoal ? (
               <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                 <View style={s.goalRow}>
                   <View style={[s.goalIcon, { backgroundColor: Colors.primary + '15' }]}>
@@ -190,40 +216,92 @@ export default function SharedGoalScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={[s.goalName, { color: theme.colors.text }]}>{activeGoal.name}</Text>
                     <Text style={[s.goalSub, { color: theme.colors.textSecondary }]}>
-                      {members.length > 0 ? `${members.length} membro${members.length > 1 ? 's' : ''}` : 'Apenas você'}
+                      {members.length > 1 ? `${members.length} membros` : members.length === 1 ? '1 membro' : 'Apenas você'}
                     </Text>
                   </View>
                 </View>
               </View>
+            ) : (
+              <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, alignItems: 'center', paddingVertical: 28 }]}>
+                <Ionicons name="alert-circle-outline" size={36} color={theme.colors.textSecondary} />
+                <Text style={[{ color: theme.colors.textSecondary, textAlign: 'center', marginTop: 8 }]}>
+                  Selecione um objetivo primeiro para gerenciá-lo
+                </Text>
+              </View>
             )}
 
-            {/* Members List */}
-            {members.length > 0 && (
+            {/* Members List - always shown when there's an active goal */}
+            {activeGoal && (
               <View style={[s.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-                <Text style={[s.cardTitle, { color: theme.colors.textSecondary }]}>Membros</Text>
-                {members.map((m, i) => (
-                  <View key={m.id} style={[s.memberRow, i < members.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.colors.border }]}>
-                    <View style={[s.avatar, { backgroundColor: roleColor(m.role) + '20' }]}>
-                      <Text style={{ fontSize: 16 }}>{m.role === 'owner' ? '👑' : '🙂'}</Text>
+                <Text style={[s.cardTitle, { color: theme.colors.textSecondary }]}>
+                  Membros {members.length > 0 ? `(${members.length})` : ''}
+                </Text>
+
+                {/* If no members registered yet, show current user as implicit owner */}
+                {members.length === 0 && (
+                  <View style={s.memberRow}>
+                    <View style={[s.avatar, { backgroundColor: '#F59E0B' + '20' }]}>
+                      <Text style={{ fontSize: 16 }}>👑</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[s.memberName, { color: theme.colors.text }]}>
-                        {m.userName}{m.userId === user?.id ? ' (você)' : ''}
-                      </Text>
-                      <Text style={[s.memberRole, { color: roleColor(m.role) }]}>{roleLabel(m.role)}</Text>
+                      <Text style={[s.memberName, { color: theme.colors.text }]}>Você (dono)</Text>
+                      <Text style={[s.memberRole, { color: '#F59E0B' }]}>👑 Dono</Text>
                     </View>
-                    {m.userId !== user?.id && members.find(x => x.userId === user?.id)?.role === 'owner' && (
-                      <TouchableOpacity onPress={() => handleRemoveMember(m)} style={s.removeBtn}>
-                        <Ionicons name="close-circle" size={22} color={Colors.error} />
-                      </TouchableOpacity>
-                    )}
-                    {m.userId === user?.id && m.role !== 'owner' && (
-                      <TouchableOpacity onPress={() => handleRemoveMember(m)} style={s.removeBtn}>
-                        <Ionicons name="exit-outline" size={20} color={Colors.error} />
-                      </TouchableOpacity>
-                    )}
                   </View>
-                ))}
+                )}
+
+                {members.map((m, i) => {
+                  const iAmOwner = members.find(x => x.userId === user?.id)?.role === 'owner';
+                  const isMe = m.userId === user?.id;
+                  const canManage = iAmOwner && !isMe && m.role !== 'owner';
+                  return (
+                    <View key={m.id} style={[s.memberRow, i < members.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.colors.border }]}>
+                      <View style={[s.avatar, { backgroundColor: roleColor(m.role) + '20' }]}>
+                        <Text style={{ fontSize: 16 }}>{m.role === 'owner' ? '👑' : m.role === 'editor' ? '✏️' : '🙂'}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[s.memberName, { color: theme.colors.text }]}>
+                          {m.userName}{isMe ? ' (você)' : ''}
+                        </Text>
+                        <Text style={[s.memberRole, { color: roleColor(m.role) }]}>{roleLabel(m.role)}</Text>
+                      </View>
+
+                      {/* Role change button (owner manages others) */}
+                      {canManage && (
+                        <TouchableOpacity onPress={() => handleChangeRole(m)} style={s.actionBtn}>
+                          <Ionicons
+                            name={m.role === 'editor' ? 'arrow-down-circle-outline' : 'arrow-up-circle-outline'}
+                            size={22}
+                            color={Colors.primary}
+                          />
+                        </TouchableOpacity>
+                      )}
+
+                      {/* Remove button */}
+                      {canManage && (
+                        <TouchableOpacity onPress={() => handleRemoveMember(m)} style={s.actionBtn}>
+                          <Ionicons name="close-circle" size={22} color={Colors.error} />
+                        </TouchableOpacity>
+                      )}
+
+                      {/* Leave button (self, non-owner) */}
+                      {isMe && m.role !== 'owner' && (
+                        <TouchableOpacity onPress={() => handleRemoveMember(m)} style={s.actionBtn}>
+                          <Ionicons name="exit-outline" size={22} color={Colors.error} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
+
+                {/* Legend for roles (only visible to owner) */}
+                {members.find(x => x.userId === user?.id)?.role === 'owner' && members.length > 1 && (
+                  <View style={[s.legend, { borderTopColor: theme.colors.border }]}>
+                    <Text style={[s.legendText, { color: theme.colors.textSecondary }]}>
+                      <Ionicons name="arrow-up-circle-outline" size={12} color={Colors.primary} /> Promover a Editor  •  <Ionicons name="close-circle" size={12} color={Colors.error} /> Remover
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
 
@@ -356,6 +434,9 @@ const styles = (theme: any) => StyleSheet.create({
   memberName: { fontSize: 14, fontWeight: '600' },
   memberRole: { fontSize: 12, marginTop: 1 },
   removeBtn: { padding: 4 },
+  actionBtn: { padding: 6, marginLeft: 2 },
+  legend: { marginTop: 12, paddingTop: 10, borderTopWidth: 1 },
+  legendText: { fontSize: 11, textAlign: 'center' },
   // Invite
   inviteCodeBox: { alignItems: 'center', gap: 12 },
   codeDisplay: { paddingHorizontal: 28, paddingVertical: 14, borderRadius: 14, borderWidth: 2 },
