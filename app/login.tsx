@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
@@ -22,6 +22,25 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  // Detecta erros do OAuth que voltam como ?error=... ou #error=... na URL
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const err = params.get('error') || hashParams.get('error');
+    const errDesc = params.get('error_description') || hashParams.get('error_description');
+    if (err) {
+      show({
+        type: 'error',
+        title: 'Falha no login',
+        message: errDesc ? decodeURIComponent(errDesc.replace(/\+/g, ' ')) : err,
+      });
+      // Limpa URL para não mostrar de novo ao recarregar
+      const url = window.location.pathname;
+      window.history.replaceState({}, '', url);
+    }
+  }, []);
 
   async function handleLogin() {
     if (!email.trim() || !password) {

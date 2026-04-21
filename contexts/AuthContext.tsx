@@ -97,11 +97,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async (): Promise<{ error?: string }> => {
     try {
       if (Platform.OS === 'web') {
-        // Monta redirectTo com origin + basePath (GitHub Pages serve em /cofrinho-digital/)
-        const redirectUrl = window.location.origin + '/cofrinho-digital';
+        // Trailing slash é importante: GitHub Pages serve em /cofrinho-digital/
+        // sem a barra, faz 301 que pode perder o query/hash em alguns browsers.
+        let redirectUrl: string;
+        if (typeof window !== 'undefined') {
+          const { origin, pathname } = window.location;
+          // Mantém o mesmo basePath atual (funciona em localhost e em gh-pages)
+          const basePath = pathname.startsWith('/cofrinho-digital') ? '/cofrinho-digital/' : '/';
+          redirectUrl = origin + basePath;
+        } else {
+          redirectUrl = 'https://jo0ji1.github.io/cofrinho-digital/';
+        }
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
-          options: { redirectTo: redirectUrl },
+          options: {
+            redirectTo: redirectUrl,
+            queryParams: {
+              // Sempre permite escolher a conta (evita "cache" do Google)
+              prompt: 'select_account',
+              access_type: 'offline',
+            },
+          },
         });
         if (error) return { error: translateError(error.message) };
         return {};
