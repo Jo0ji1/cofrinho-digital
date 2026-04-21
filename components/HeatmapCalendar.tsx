@@ -18,9 +18,19 @@ interface Props {
 
 export function HeatmapCalendar({ savings, isDark, theme }: Props) {
   const grid = useMemo(() => {
+    // Use local date (YYYY-MM-DD) to avoid UTC shift issues
+    const toLocalKey = (dt: Date) => {
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const d = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    };
+
     const dateMap: Record<string, number> = {};
     savings.forEach(s => {
-      const key = s.date.split('T')[0];
+      const parsed = new Date(s.date);
+      if (isNaN(parsed.getTime())) return;
+      const key = toLocalKey(parsed);
       dateMap[key] = (dateMap[key] || 0) + s.amount;
     });
 
@@ -36,7 +46,7 @@ export function HeatmapCalendar({ savings, isDark, theme }: Props) {
 
     for (let col = 0; col < WEEKS; col++) {
       for (let row = 0; row < DAYS; row++) {
-        const key = d.toISOString().split('T')[0];
+        const key = toLocalKey(d);
         cells.push({ date: key, amount: dateMap[key] || 0, col, row });
         d.setDate(d.getDate() + 1);
       }

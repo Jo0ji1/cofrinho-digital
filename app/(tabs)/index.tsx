@@ -493,6 +493,15 @@ export default function HomeScreen() {
               style={{ borderRadius: 12, marginTop: 8 }}
               withInnerLines={false}
               withOuterLines={false}
+              getDotProps={(_value, index) => {
+                const isSelected = selectedPointIndex === index;
+                return {
+                  r: isSelected ? '9' : '5',
+                  strokeWidth: isSelected ? '3' : '2',
+                  stroke: isSelected ? '#064E3B' : Colors.primary,
+                  fill: isSelected ? '#10B981' : '#FFFFFF',
+                } as any;
+              }}
               onDataPointClick={({ index }) => {
                 setSelectedPointIndex(selectedPointIndex === index ? null : index);
               }}

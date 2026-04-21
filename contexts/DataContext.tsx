@@ -519,7 +519,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         .order('created_at', { ascending: false })
         .limit(limit);
 
-      const userIds = Array.from(new Set((data || []).map((a: any) => a.user_id)));
+      const actorIds = (data || []).map((a: any) => a.user_id);
+      const targetIds = (data || []).map((a: any) => a.metadata?.targetUserId).filter(Boolean);
+      const userIds = Array.from(new Set([...actorIds, ...targetIds]));
       let namesMap: Record<string, string> = {};
       if (userIds.length > 0) {
         const { data: profiles } = await supabase
@@ -529,15 +531,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
         namesMap = Object.fromEntries((profiles || []).map((p: any) => [p.id, p.name || 'Usuário']));
       }
 
-      return (data || []).map((a: any) => ({
-        id: a.id,
-        goalId: a.goal_id,
-        userId: a.user_id,
-        userName: a.user_id === user.id ? 'Você' : (namesMap[a.user_id] || 'Usuário'),
-        action: a.action,
-        metadata: a.metadata || {},
-        createdAt: a.created_at,
-      }));
+      return (data || []).map((a: any) => {
+        const targetId = a.metadata?.targetUserId;
+        return {
+          id: a.id,
+          goalId: a.goal_id,
+          userId: a.user_id,
+          userName: a.user_id === user.id ? 'Você' : (namesMap[a.user_id] || 'Usuário'),
+          targetUserName: targetId ? (targetId === user.id ? 'você' : (namesMap[targetId] || 'alguém')) : undefined,
+          action: a.action,
+          metadata: a.metadata || {},
+          createdAt: a.created_at,
+        };
+      });
     } catch {
       return [];
     }

@@ -101,6 +101,7 @@ export interface GoalActivity {
   goalId: string;
   userId: string;
   userName?: string;
+  targetUserName?: string;
   action: ActivityAction;
   metadata?: Record<string, any>;
   createdAt: string;

@@ -445,6 +445,13 @@ export default function SharedGoalScreen() {
                     edited_goal: 'editou o objetivo',
                     completed_goal: 'concluiu o objetivo',
                   };
+                  // Actions where the actor performed something ON a target member
+                  const targetActions: Record<string, string> = {
+                    approved: 'aprovou',
+                    promoted: 'promoveu',
+                    demoted: 'rebaixou',
+                    removed: 'removeu',
+                  };
                   const meta = iconMap[act.action] || { icon: 'information-circle-outline', color: '#6B7280' };
                   const label = labelMap[act.action] || act.action;
                   const timeAgo = (() => {
@@ -464,9 +471,19 @@ export default function SharedGoalScreen() {
                         <Ionicons name={meta.icon} size={16} color={meta.color} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: theme.colors.text, fontSize: 13 }}>
-                          <Text style={{ fontWeight: '700' }}>{act.userName || 'Alguém'}</Text> {label}
-                        </Text>
+                        {targetActions[act.action] && act.targetUserName ? (
+                          <Text style={{ color: theme.colors.text, fontSize: 13 }}>
+                            <Text style={{ fontWeight: '700' }}>{act.userName || 'Alguém'}</Text>{' '}
+                            {targetActions[act.action]}{' '}
+                            <Text style={{ fontWeight: '700' }}>{act.targetUserName}</Text>
+                            {act.action === 'promoted' && act.metadata?.toRole ? ` a ${act.metadata.toRole === 'editor' ? 'Editor' : 'Participante'}` : ''}
+                            {act.action === 'demoted' && act.metadata?.toRole ? ` a ${act.metadata.toRole === 'participant' ? 'Participante' : act.metadata.toRole === 'viewer' ? 'Visualizador' : act.metadata.toRole}` : ''}
+                          </Text>
+                        ) : (
+                          <Text style={{ color: theme.colors.text, fontSize: 13 }}>
+                            <Text style={{ fontWeight: '700' }}>{act.userName || 'Alguém'}</Text> {label}
+                          </Text>
+                        )}
                         <Text style={{ color: theme.colors.textSecondary, fontSize: 11, marginTop: 1 }}>{timeAgo}</Text>
                       </View>
                     </View>

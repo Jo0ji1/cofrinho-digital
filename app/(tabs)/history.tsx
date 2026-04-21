@@ -221,20 +221,20 @@ export default function HistoryScreen() {
                       <Text style={[s.cardDate, { color: theme.colors.textSecondary }]}>{formatDate(item.date)}</Text>
                       {item.categoryName && (
                         <View style={[s.badge, { backgroundColor: (item.categoryColor || '#888') + '20' }]}>
-                          <Text style={[s.badgeText, { color: item.categoryColor || '#888' }]}>{item.categoryName}</Text>
+                          <Text style={[s.badgeText, { color: item.categoryColor || '#888' }]} numberOfLines={1}>{item.categoryName}</Text>
                         </View>
                       )}
                       {hasMultipleGoals && item.goalId && (() => {
                         const g = goals.find(gl => gl.id === item.goalId);
                         return g ? (
                           <View style={[s.badge, { backgroundColor: Colors.primary + '15' }]}>
-                            <Text style={[s.badgeText, { color: Colors.primary }]}>🎯 {g.name}</Text>
+                            <Text style={[s.badgeText, { color: Colors.primary }]} numberOfLines={1}>🎯 {g.name}</Text>
                           </View>
                         ) : null;
                       })()}
                       {isShared && item.authorName && (
                         <View style={[s.badge, { backgroundColor: '#8B5CF6' + '20' }]}>
-                          <Text style={[s.badgeText, { color: '#8B5CF6' }]}>👤 {item.authorName}</Text>
+                          <Text style={[s.badgeText, { color: '#8B5CF6' }]} numberOfLines={1}>👤 {item.authorName}</Text>
                         </View>
                       )}
                     </View>
@@ -386,7 +386,7 @@ const styles = (theme: any) => StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  cardTop: { flexDirection: 'row', alignItems: 'center' },
+  cardTop: { flexDirection: 'row', alignItems: 'flex-start' },
   iconBox: {
     width: 42,
     height: 42,
@@ -395,13 +395,13 @@ const styles = (theme: any) => StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
-  cardInfo: { flex: 1 },
-  cardDesc: { fontSize: 15, fontWeight: '500', marginBottom: 2 },
-  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  cardInfo: { flex: 1, minWidth: 0 },
+  cardDesc: { fontSize: 15, fontWeight: '600', marginBottom: 4 },
+  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   cardDate: { fontSize: 12 },
-  badge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
-  badgeText: { fontSize: 10, fontWeight: '600' },
-  cardAmount: { fontSize: 15, fontWeight: '700' },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, maxWidth: 160 },
+  badgeText: { fontSize: 11, fontWeight: '600' },
+  cardAmount: { fontSize: 15, fontWeight: '800', marginLeft: 8, marginTop: 2 },
   cardActions: {
     flexDirection: 'row',
     gap: 8,

@@ -344,13 +344,19 @@ export default function SettingsScreen() {
                           <Text style={{ fontSize: 10, color: '#8B5CF6', fontWeight: '600' }}>{memberCount}</Text>
                         </View>
                       )}
-                      {role && role !== 'owner' && (
-                        <View style={{ backgroundColor: (role === 'editor' ? '#3B82F6' : '#6B7280') + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 }}>
-                          <Text style={{ fontSize: 10, color: role === 'editor' ? '#3B82F6' : '#6B7280', fontWeight: '600' }}>
-                            {role === 'editor' ? 'Editor' : 'Participante'}
-                          </Text>
-                        </View>
-                      )}
+                      {role && role !== 'owner' && (() => {
+                        const roleMeta: Record<string, { label: string; color: string }> = {
+                          editor: { label: 'Editor', color: '#3B82F6' },
+                          participant: { label: 'Participante', color: '#10B981' },
+                          viewer: { label: 'Aguardando aprovação', color: '#F59E0B' },
+                        };
+                        const m = roleMeta[role] || { label: role, color: '#6B7280' };
+                        return (
+                          <View style={{ backgroundColor: m.color + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 }}>
+                            <Text style={{ fontSize: 10, color: m.color, fontWeight: '600' }}>{m.label}</Text>
+                          </View>
+                        );
+                      })()}
                     </View>
                     <Text style={[s.goalItemSub, { color: theme.colors.textSecondary }]}>
                       {formatCurrency(gTotal)} / {formatCurrency(g.targetAmount)} ({Math.round(gPct * 100)}%)
@@ -485,7 +491,10 @@ export default function SettingsScreen() {
         )}
 
         {/* Modality */}
-        {activeGoal && (
+        {activeGoal && (() => {
+          const myRole = myRoleByGoal[activeGoal.id];
+          const canChangeModality = !myRole || myRole === 'owner' || myRole === 'editor';
+          return (
           <View style={[s.section, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <View style={s.sectionHeader}>
               <Ionicons name="swap-horizontal" size={18} color={Colors.primary} />
@@ -494,25 +503,34 @@ export default function SettingsScreen() {
             <Text style={[s.infoSub, { color: theme.colors.textSecondary }]}>
               Atual: {activeGoal.activeModality === 'daily' ? 'Diária' : activeGoal.activeModality === 'weekly' ? 'Semanal' : 'Mensal'}
             </Text>
-            <TouchableOpacity style={[s.outlineBtn, { borderColor: Colors.primary }]} onPress={() => setShowModalities(!showModalities)}>
-              <Text style={[s.outlineBtnText, { color: Colors.primary }]}>
-                {showModalities ? 'Fechar' : 'Alterar modalidade'}
+            {canChangeModality ? (
+              <>
+                <TouchableOpacity style={[s.outlineBtn, { borderColor: Colors.primary }]} onPress={() => setShowModalities(!showModalities)}>
+                  <Text style={[s.outlineBtnText, { color: Colors.primary }]}>
+                    {showModalities ? 'Fechar' : 'Alterar modalidade'}
+                  </Text>
+                </TouchableOpacity>
+                {showModalities && (
+                  <View style={{ marginTop: 12 }}>
+                    {modalities.map(m => (
+                      <ModalityCard
+                        key={m.type}
+                        modality={m}
+                        selected={activeGoal.activeModality === m.type}
+                        onSelect={() => handleSelectModality(m.type)}
+                      />
+                    ))}
+                  </View>
+                )}
+              </>
+            ) : (
+              <Text style={[s.infoSub, { color: theme.colors.textSecondary, fontStyle: 'italic' }]}>
+                🔒 Apenas o dono ou editores podem alterar a modalidade.
               </Text>
-            </TouchableOpacity>
-            {showModalities && (
-              <View style={{ marginTop: 12 }}>
-                {modalities.map(m => (
-                  <ModalityCard
-                    key={m.type}
-                    modality={m}
-                    selected={activeGoal.activeModality === m.type}
-                    onSelect={() => handleSelectModality(m.type)}
-                  />
-                ))}
-              </View>
             )}
           </View>
-        )}
+          );
+        })()}
 
         {/* Export CSV */}
         {activeGoal && (
