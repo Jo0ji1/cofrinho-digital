@@ -123,6 +123,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return {};
       }
       await GoogleSignin.hasPlayServices();
+      // Garante que sempre abre seletor (evita "cache" onde o Google usa a ultima conta automaticamente)
+      try { await GoogleSignin.signOut(); } catch {}
       const response = await GoogleSignin.signIn();
 
       if (!isSuccessResponse(response)) {
@@ -131,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const idToken = response.data.idToken;
       if (!idToken) {
-        return { error: 'Não foi possível obter o token do Google.' };
+        return { error: 'Não foi possível obter o token do Google. Verifique se o webClientId está correto.' };
       }
 
       const { error } = await supabase.auth.signInWithIdToken({
@@ -139,7 +141,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token: idToken,
       });
 
-      if (error) return { error: translateError(error.message) };
+      if (error) {
+        // Log detalhado para debug no dispositivo
+        console.log('[Google SignIn] Supabase error:', JSON.stringify(error));
+        return { error: `Supabase: ${error.message}` };
+      }
       return {};
     } catch (err: any) {
       return { error: err?.message || 'Erro ao fazer login com Google.' };
