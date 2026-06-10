@@ -62,10 +62,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!EMAIL_RE.test(email)) return { error: 'Formato de email inválido.' };
     if (password.length < 6) return { error: 'A senha deve ter pelo menos 6 caracteres.' };
 
-    // Redirect URL para confirmação de email (web usa origin + basePath)
+    // Redirect URL para confirmação de email no domínio atual (Vercel/localhost)
     let emailRedirectTo: string | undefined;
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      emailRedirectTo = window.location.origin + '/cofrinho-digital/';
+      emailRedirectTo = window.location.origin + '/';
     }
 
     const { error } = await supabase.auth.signUp({
@@ -97,21 +97,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async (): Promise<{ error?: string }> => {
     try {
       if (Platform.OS === 'web') {
-        // Trailing slash é importante: GitHub Pages serve em /cofrinho-digital/
-        // sem a barra, faz 301 que pode perder o query/hash em alguns browsers.
-        let redirectUrl: string;
-        if (typeof window !== 'undefined') {
-          const { origin, pathname } = window.location;
-          // Mantém o mesmo basePath atual (funciona em localhost e em gh-pages)
-          const basePath = pathname.startsWith('/cofrinho-digital') ? '/cofrinho-digital/' : '/';
-          redirectUrl = origin + basePath;
-        } else {
-          redirectUrl = 'https://jo0ji1.github.io/cofrinho-digital/';
-        }
+        const redirectUrl = typeof window !== 'undefined'
+          ? window.location.origin + '/'
+          : undefined;
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: redirectUrl,
+            ...(redirectUrl ? { redirectTo: redirectUrl } : {}),
             queryParams: {
               // Sempre permite escolher a conta (evita "cache" do Google)
               prompt: 'select_account',
