@@ -29,9 +29,7 @@
       "bundler": "metro",
       "output": "single"
     },
-    "experiments": {
-      "baseUrl": "/cofrinho-digital"
-    },
+    "experiments": {},
     "plugins": [
       "expo-router",
       "expo-sharing",
