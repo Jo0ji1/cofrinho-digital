@@ -33,6 +33,7 @@ interface DataContextType {
   removeGoalMember: (goalId: string, userId: string) => Promise<void>;
   updateMemberRole: (goalId: string, userId: string, role: 'editor' | 'participant' | 'viewer') => Promise<boolean>;
   getGoalInvites: (goalId: string) => Promise<GoalInvite[]>;
+  deleteGoalInvite: (goalId: string, inviteId: string) => Promise<boolean>;
   // Activity feed
   getGoalActivities: (goalId: string, limit?: number) => Promise<GoalActivity[]>;
   logActivity: (goalId: string, action: ActivityAction, metadata?: Record<string, any>) => Promise<void>;
@@ -676,6 +677,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const deleteGoalInvite = async (goalId: string, inviteId: string): Promise<boolean> => {
+    if (!isSupabaseConfigured() || !user) return false;
+    try {
+      const { error } = await supabase
+        .from('goal_invites')
+        .delete()
+        .eq('id', inviteId)
+        .eq('goal_id', goalId);
+      return !error;
+    } catch {
+      return false;
+    }
+  };
+
   const resetAll = async () => {
     if (isSupabaseConfigured() && user) {
       await supabase.from('savings').delete().eq('user_id', user.id);
@@ -697,7 +712,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setGoal, addGoal, updateGoal, deleteGoal, setActiveGoal: setActiveGoalFn,
       addSaving, updateSaving, deleteSaving, setNotifications,
       completeOnboarding, resetAll, refresh: loadData,
-      getGoalMembers, createGoalInvite, regenerateInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites,
+      getGoalMembers, createGoalInvite, regenerateInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites, deleteGoalInvite,
       getGoalActivities, logActivity,
       myRoleByGoal, memberCountByGoal,
     }}>

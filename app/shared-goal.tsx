@@ -15,7 +15,7 @@ import { showAlert } from '../utils/alert';
 
 export default function SharedGoalScreen() {
   const { theme } = useTheme();
-  const { activeGoal, savings, getGoalMembers, createGoalInvite, regenerateInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites, getGoalActivities, refresh } = useData();
+  const { activeGoal, savings, getGoalMembers, createGoalInvite, regenerateInvite, joinGoalByInvite, removeGoalMember, updateMemberRole, getGoalInvites, deleteGoalInvite, getGoalActivities, refresh } = useData();
   const { user } = useAuth();
   const router = useRouter();
 
@@ -127,6 +127,32 @@ export default function SharedGoalScreen() {
     } else {
       showAlert('Erro', result.error || 'Não foi possível entrar no objetivo');
     }
+  };
+
+  const handleDeleteInvite = async (inviteId: string, inviteCode: string) => {
+    showAlert(
+      'Remover código de convite',
+      `Tem certeza que quer remover o código ${inviteCode}?\n\nPessoas com este código não conseguirão mais entrar no objetivo.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Remover',
+          style: 'destructive',
+          onPress: async () => {
+            if (!activeGoal) return;
+            setLoading(true);
+            const ok = await deleteGoalInvite(activeGoal.id, inviteId);
+            setLoading(false);
+            if (ok) {
+              await loadData();
+              showAlert('✅ Removido', `O código ${inviteCode} foi removido.`);
+            } else {
+              showAlert('Erro', 'Não foi possível remover o código.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleApprove = (member: GoalMember) => {
@@ -560,7 +586,14 @@ export default function SharedGoalScreen() {
                             {isExpired ? ' • Expirado' : isFull ? ' • Lotado' : ''}
                           </Text>
                         </TouchableOpacity>
-                        <Ionicons name="share-outline" size={16} color={theme.colors.textSecondary} />
+                        <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                          <TouchableOpacity onPress={() => handleShareInvite(inv.inviteCode)}>
+                            <Ionicons name="share-outline" size={16} color={theme.colors.textSecondary} />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => handleDeleteInvite(inv.id, inv.inviteCode)}>
+                            <Ionicons name="trash-outline" size={16} color={Colors.primary} />
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     );
                   })}
